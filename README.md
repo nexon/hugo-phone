@@ -55,10 +55,13 @@ Configurable en `bridge/config.toml` (hot-reload sin restart).
 ```
 hugo-phone/
 ├── README.md
-├── asterisk/                  # /etc/asterisk/
-│   ├── sip.conf
-│   ├── extensions.conf
-│   └── manager.conf
+├── config
+|   |--asterisk/                  # /etc/asterisk/
+│      ├── sip.conf
+│      ├── extensions.conf
+│      └── manager.conf
+|   ├── dosbox/
+│   └── dosbox-hugo.conf
 ├── bridge/                    # Rust workspace
 │   ├── Cargo.toml
 │   ├── config.toml            # config en runtime (hot-reload)
@@ -69,8 +72,6 @@ hugo-phone/
 │       ├── ami.rs             # cliente AMI minimal (~150 LOC)
 │       ├── keyboard.rs        # teclado virtual uinput
 │       └── watcher.rs         # file watcher para hot-reload
-├── dosbox/
-│   └── dosbox-hugo.conf
 ├── scripts/
 │   ├── install-all.sh
 │   └── download-hugo.sh
