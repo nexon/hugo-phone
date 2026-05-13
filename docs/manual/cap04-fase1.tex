@@ -1,0 +1,232 @@
+\chapter{Fase 1: Preparación de la Raspberry Pi}
+
+\section{Objetivo}
+
+Al final de esta fase, la Raspberry Pi debe estar:
+
+\begin{itemize}
+  \item Booteando con Raspberry Pi OS Lite (64-bit).
+  \item Accesible por SSH desde la Mac de trabajo.
+  \item Con IP estática reservada en el router.
+  \item Con Asterisk 20 instalado y respondiendo en su CLI.
+  \item Con los archivos de configuración del proyecto colocados en \texttt{/etc/asterisk/}.
+\end{itemize}
+
+\section{Materiales}
+
+\begin{itemize}
+  \item Raspberry Pi 4 (2\,GB)
+  \item MicroSD 32\,GB
+  \item Fuente USB-C oficial
+  \item Cable micro-HDMI
+  \item Teclado USB (solo para el primer arranque)
+  \item Televisor o monitor con HDMI
+  \item Mac (u otra computadora) con lector de microSD
+\end{itemize}
+
+\section{Paso 1: Flashear la microSD}
+
+Desde la Mac, descargar e instalar el \emph{Raspberry Pi Imager} desde el sitio oficial \texttt{raspberrypi.com/software}. Conectar la microSD a la Mac (con adaptador USB si es necesario).
+
+Al abrir el Imager configurar:
+
+\begin{itemize}
+  \item \textbf{Device:} Raspberry Pi 4
+  \item \textbf{Operating System:} Raspberry Pi OS Lite (64-bit)
+  \item \textbf{Storage:} la microSD insertada
+\end{itemize}
+
+Antes de presionar \emph{Write}, hacer clic en el ícono de engranaje (\textsf{\textbf{\textcolor{hugoblue}{Edit Settings}}}) para configurar:
+
+\begin{itemize}
+  \item \textbf{Hostname:} \texttt{hugo-pbx}
+  \item \textbf{Usuario:} \texttt{beto} (o el nombre que se prefiera), con contraseña robusta.
+  \item \textbf{SSH:} habilitado, autenticación por contraseña o por clave pública.
+  \item \textbf{WiFi:} SSID y password (solo si no se usará Ethernet).
+  \item \textbf{Locale:} \texttt{America/Santiago}, teclado \texttt{latam}.
+\end{itemize}
+
+Confirmar y dejar que el Imager escriba (entre 5 y 15 minutos según la velocidad del lector).
+
+\section{Paso 2: Primer arranque}
+
+Insertar la microSD en la Pi, conectar HDMI, teclado USB y, finalmente, la fuente. El primer boot tarda entre 1 y 2 minutos porque expande automáticamente el sistema de archivos. Al terminar mostrará un \emph{login prompt}.
+
+Iniciar sesión con el usuario y contraseña configurados en el paso anterior.
+
+\section{Paso 3: Configuración de red}
+
+Lo deseable es asignar una IP estática reservada en el router para la dirección MAC de la Pi. Para obtener la MAC del puerto Ethernet:
+
+\begin{shellcode}
+ip link show eth0 | grep ether
+\end{shellcode}
+
+La salida tendrá la forma \texttt{link/ether dc:a6:32:xx:xx:xx}. Anotar esa MAC, ingresar al panel de administración del router (habitualmente \texttt{http://192.168.1.1}) y reservar la IP \texttt{192.168.1.10} para esa MAC.
+
+Reiniciar la Pi y verificar la IP:
+
+\begin{shellcode}
+ip addr show eth0
+\end{shellcode}
+
+\begin{tip}
+Si el router asigna IPs en otro rango (por ejemplo \texttt{192.168.0.x} o \texttt{10.0.0.x}), adaptar todas las direcciones del manual en consecuencia.
+\end{tip}
+
+\section{Paso 4: Conexión por SSH}
+
+Desde la Mac:
+
+\begin{shellcode}
+ssh beto@192.168.1.10
+\end{shellcode}
+
+Si el router resuelve mDNS, también funciona:
+
+\begin{shellcode}
+ssh beto@hugo-pbx.local
+\end{shellcode}
+
+A partir de este punto el teclado USB y el HDMI ya no son necesarios.
+
+\section{Paso 5: Actualización del sistema}
+
+\begin{shellcode}
+sudo apt update
+sudo apt upgrade -y
+sudo reboot
+\end{shellcode}
+
+Reconectar SSH después del reinicio.
+
+\section{Paso 6: Clonar el repositorio del proyecto}
+
+Copiar el directorio \texttt{hugo-phone/} entregado en el repositorio del proyecto a la Pi. Si está en un servicio Git:
+
+\begin{shellcode}
+cd ~
+git clone <URL-del-repositorio> hugo-phone
+cd hugo-phone
+\end{shellcode}
+
+Si los archivos están solo en la Mac:
+
+\begin{shellcode}
+# Desde la Mac
+scp -r hugo-phone/ beto@hugo-pbx.local:~/
+\end{shellcode}
+
+\section{Paso 7: Ejecutar el instalador}
+
+\begin{shellcode}
+cd ~/hugo-phone
+sudo bash scripts/install-all.sh
+\end{shellcode}
+
+El script realiza, en orden:
+
+\begin{enumerate}
+  \item \texttt{apt update \&\& apt upgrade} completos.
+  \item Instalación de Asterisk 20, DOSBox-Staging, \texttt{build-essential}, \texttt{libudev-dev} y demás dependencias.
+  \item Copia de los archivos \texttt{sip.conf}, \texttt{extensions.conf} y \texttt{manager.conf} a \texttt{/etc/asterisk/} con permisos correctos.
+  \item Instalación de \emph{rustup} en el usuario \texttt{beto} (descarga e instalación de la toolchain estable).
+  \item Compilación del bridge en modo \texttt{release}, con LTO y \texttt{strip}.
+  \item Creación de la regla \texttt{udev} para \texttt{/dev/uinput} y carga del módulo del kernel.
+  \item Instalación del servicio \texttt{systemd} \texttt{hugo-bridge.service}.
+  \item Despliegue de la configuración de DOSBox-Staging en \texttt{\~{}/.config/dosbox/}.
+\end{enumerate}
+
+La fase más lenta es la compilación del bridge, que en una Pi 4 toma entre 5 y 8 minutos. Tiempo total estimado: 20--30 minutos según velocidad de red.
+
+\section{Paso 8: Configurar secretos}
+
+Las contraseñas iniciales son placeholders y deben reemplazarse antes de cualquier uso real:
+
+\begin{shellcode}
+sudo nano /etc/asterisk/sip.conf
+sudo nano /etc/asterisk/manager.conf
+sudo nano /opt/hugo-phone/bridge/config.toml
+\end{shellcode}
+
+Reemplazar todas las ocurrencias de \texttt{cambiame-101}, \texttt{cambiame-102} y \texttt{cambiame-ami}.
+
+\begin{advertencia}
+La contraseña en \texttt{manager.conf} (sección \texttt{[hugo-bridge]}) y la del archivo \texttt{config.toml} (sección \texttt{[ami]}) deben ser \textbf{idénticas}. De lo contrario el bridge no podrá autenticarse en Asterisk.
+\end{advertencia}
+
+Aplicar cambios reiniciando Asterisk:
+
+\begin{shellcode}
+sudo systemctl restart asterisk
+\end{shellcode}
+
+\section{Paso 9: Verificación}
+
+Ingresar a la consola interactiva de Asterisk:
+
+\begin{shellcode}
+sudo asterisk -rvvv
+\end{shellcode}
+
+Dentro del CLI ejecutar:
+
+\begin{plaincode}
+hugo-pbx*CLI> sip show peers
+\end{plaincode}
+
+Debe listar las extensiones 101 y 102 (esta última se usará en la siguiente fase) con estado \texttt{Unmonitored} (sin clientes registrados aún).
+
+\begin{plaincode}
+hugo-pbx*CLI> manager show settings
+\end{plaincode}
+
+Debe indicar \texttt{Enabled: Yes} y \texttt{Port: 5038}.
+
+\begin{plaincode}
+hugo-pbx*CLI> dialplan show hugo-game
+\end{plaincode}
+
+Debe mostrar la extensión \texttt{9000} con sus pasos de \texttt{Answer}, \texttt{Wait}, \texttt{Playback(beep)}, \texttt{Read} y \texttt{UserEvent}.
+
+Si los tres comandos responden sin error, la \textbf{Fase 1 está completa}.
+
+\section{Resolución de problemas}
+
+\subsection{Asterisk no inicia}
+
+\begin{shellcode}
+sudo journalctl -u asterisk -n 80
+\end{shellcode}
+
+Casi siempre se trata de un error de sintaxis en uno de los archivos \texttt{.conf} que el log indica con número de línea exacto.
+
+\subsection{La Pi se reinicia sin causa aparente o presenta lag aleatorio}
+
+Probablemente la fuente de poder es insuficiente. La Pi muestra un ícono de rayo amarillo en pantalla cuando detecta \emph{undervoltage}. Cambiar a la fuente oficial 5\,V/3\,A.
+
+\subsection{SSH no responde}
+
+\begin{itemize}
+  \item Verificar que el cable Ethernet esté conectado o que el WiFi haya tomado correctamente la red. Conectar teclado + HDMI y ejecutar \texttt{ip addr}.
+  \item Revisar que el servicio SSH esté corriendo: \texttt{sudo systemctl status ssh}.
+  \item Confirmar que el firewall del router no esté bloqueando el tráfico LAN.
+\end{itemize}
+
+\subsection{El instalador falla durante la compilación del bridge}
+
+\begin{itemize}
+  \item Reintentar manualmente como usuario \texttt{beto}:
+  \begin{shellcode}
+cd /opt/hugo-phone/bridge
+~/.cargo/bin/cargo build --release
+  \end{shellcode}
+  \item Si falla por falta de memoria (poco probable en Pi 4 2\,GB, pero posible), agregar \emph{swap}:
+  \begin{shellcode}
+sudo dphys-swapfile swapoff
+sudo sed -i 's/CONF_SWAPSIZE=.*/CONF_SWAPSIZE=2048/' \
+  /etc/dphys-swapfile
+sudo dphys-swapfile setup
+sudo dphys-swapfile swapon
+  \end{shellcode}
+\end{itemize}

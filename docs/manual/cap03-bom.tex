@@ -1,0 +1,131 @@
+\chapter{Lista de materiales}
+
+\section{Componentes esenciales}
+
+Los siguientes componentes son indispensables para el sistema en su configuración mínima (un solo teléfono). Precios referenciales en pesos chilenos a mediados de 2026.
+
+\begin{longtable}{p{0.4\textwidth} p{0.32\textwidth} R{0.18\textwidth}}
+\toprule
+\textbf{Componente} & \textbf{Modelo sugerido} & \textbf{Precio CLP} \\
+\midrule
+\endhead
+Single Board Computer & Raspberry Pi 4 Modelo B (2\,GB) & \$85.000 \\
+Fuente de poder & USB-C oficial Raspberry Pi 15\,W (5\,V/3\,A) & \$15.000 \\
+Almacenamiento & MicroSD SanDisk 32\,GB Clase 10 / A1 & \$10.000 \\
+Disipación térmica & Caja con ventilador para Pi 4 & \$12.000 \\
+Cable de video & Cable micro-HDMI a HDMI, 1.5\,m & \$5.000 \\
+Adaptador telefónico & Grandstream HT801 (1 puerto FXS) & \$40.000 \\
+Cable telefónico & Cable RJ11, 2\,m & \$2.000 \\
+Cable de red & Patch cord Ethernet Cat5e, 1\,m & \$3.000 \\
+Teléfono analógico & Cualquier teléfono fijo con DTMF (años 90+) & --- \\
+Televisor/monitor & Equipo con entrada HDMI & --- \\
+\midrule
+\textbf{Total esenciales} & & \textbf{\textasciitilde\$172.000} \\
+\bottomrule
+\caption{Bill of materials esencial.}\\
+\end{longtable}
+
+\subsection{Detalles por componente}
+
+\subsubsection{Raspberry Pi 4 (2\,GB)}
+
+Disponible en Chile a través de distribuidores oficiales como \texttt{raspberrypi.cl} y \texttt{mcielectronics.cl}. Se requiere el modelo Pi 4B con al menos 2\,GB de RAM. Modelos anteriores (3B+ o inferiores) no tienen suficiente rendimiento de emulación, y modelos con menos RAM dejan sin margen al sistema.
+
+\begin{nota}
+Si la Pi 4 (2\,GB) está sin stock, la Pi 5 (2\,GB) sirve también y rinde mejor. La diferencia de precio suele ser de 10\% adicional. Cualquiera de las dos cumple los requisitos.
+\end{nota}
+
+\subsubsection{Fuente USB-C oficial}
+
+\textbf{Crítica.} La Pi 4 demanda 5\,V a 3\,A reales bajo carga. Cargadores de teléfono móvil, incluso los de marca, suelen entregar voltaje inestable, lo cual provoca \emph{undervoltage warnings}, reinicios espontáneos y corrupción de la microSD. La fuente oficial es la única forma confiable de evitarlo.
+
+\subsubsection{MicroSD}
+
+32\,GB es más que suficiente. Las especificaciones importantes son:
+
+\begin{itemize}
+  \item \textbf{Clase 10}: garantiza 10\,MB/s de escritura sostenida.
+  \item \textbf{Endurance A1 o A2}: optimizado para aplicaciones (no solo grandes archivos como video).
+\end{itemize}
+
+Marcas recomendadas: SanDisk Endurance, Samsung Evo Plus.
+
+\begin{tip}
+Las microSD ``baratas sin marca'' fallan en cuestión de meses cuando un sistema operativo escribe constantemente. Para un \emph{appliance} que vive encendido, vale la pena gastar un poco más.
+\end{tip}
+
+\subsubsection{Grandstream HT801}
+
+\emph{Analog Telephone Adapter} (ATA) con un puerto FXS \emph{(Foreign eXchange Subscriber)}, es decir, un puerto que provee voltaje de línea (\textasciitilde48\,V DC) y voltaje de timbre (\textasciitilde90\,V AC) hacia un teléfono analógico, y por el otro lado se conecta por Ethernet a la red local y se registra como cliente SIP.
+
+Características relevantes:
+
+\begin{itemize}
+  \item Codecs G.711 (PCMU/PCMA), G.722, G.729, iLBC, OPUS
+  \item DTMF in-band, RFC 2833 y SIP INFO
+  \item Configurable vía web
+  \item Función \emph{Off-hook Auto-Dial}: marca automáticamente un número al descolgar
+\end{itemize}
+
+En Chile se consigue por MercadoLibre, distribuidores VoIP como Inttelec o Centralinet, o importación directa por Aliexpress (con riesgo de garantía).
+
+\subsubsection{Teléfono analógico}
+
+Cualquier teléfono fijo con teclado DTMF de los últimos cuarenta años funciona. \textbf{Los teléfonos de disco rotatorio no sirven} porque generan pulsos, no tonos. Modelos clásicos que cumplen el rol y aportan estética noventera:
+
+\begin{itemize}
+  \item Panasonic KX-T series
+  \item General Electric con cable rizado
+  \item VTech inalámbrico (los primeros, con base grande)
+  \item Cualquier teléfono ``de hotel'' Cetis o similar
+\end{itemize}
+
+\section{Componentes opcionales}
+
+\begin{longtable}{p{0.4\textwidth} p{0.4\textwidth} R{0.15\textwidth}}
+\toprule
+\textbf{Componente} & \textbf{Razón} & \textbf{Precio CLP} \\
+\midrule
+\endhead
+TV CRT pequeño usado & Estética auténtica años 90 & \$20.000--40.000 \\
+Switch Ethernet 5 puertos & Si el router está lejos del setup & \$10.000 \\
+Capturadora HDMI USB & Para grabar/transmitir partidas & \$25.000 \\
+Parlantes externos 3.5\,mm & Si el TV tiene audio pobre & \$15.000 \\
+Etiquetas decorativas & Diseño tipo ``Jugador 1'' en el teléfono & \$3.000 \\
+\bottomrule
+\caption{Componentes opcionales.}\\
+\end{longtable}
+
+\section{Plan de crecimiento: multijugador}
+
+El sistema base soporta un solo teléfono. Para escalar al modo televisión con múltiples jugadores simultáneos:
+
+\begin{itemize}
+  \item Reemplazar el HT801 por un \textbf{HT802} (2 puertos FXS, $\sim$\$55.000) o \textbf{HT814} (4 puertos FXS, $\sim$\$110.000).
+  \item Adquirir teléfonos adicionales.
+  \item Reconfigurar Asterisk con \texttt{ConfBridge} y lógica de cola de turnos.
+\end{itemize}
+
+Este crecimiento se documenta en detalle en el capítulo 9.
+
+\section{Comparativa con alternativas}
+
+\begin{table}[h]
+\centering
+\begin{tabular}{lccc}
+\toprule
+& \textbf{Pi 4 (2\,GB)} & \textbf{Pi 5 (2\,GB)} & \textbf{Mini PC x86 usado} \\
+\midrule
+Precio aprox. (CLP) & \$85.000 & \$95.000 & \$100.000 \\
+Emulación de Hugo & Buena & Muy buena & Excelente (nativo) \\
+Consumo eléctrico & 5--7\,W & 8--12\,W & 15--25\,W \\
+Asterisk & Perfecto & Perfecto & Perfecto \\
+Tamaño físico & Tarjeta de crédito & Tarjeta de crédito & Pequeño \\
+HDMI a TV & Sí (micro) & Sí (micro) & Sí (estándar) \\
+Estética appliance & Excelente & Excelente & Buena \\
+\bottomrule
+\end{tabular}
+\caption{Comparativa de plataformas para Hugo Phone.}
+\end{table}
+
+Para este proyecto se selecciona la \textbf{Pi 4 (2\,GB)} por la combinación de precio, tamaño y eficiencia energética.

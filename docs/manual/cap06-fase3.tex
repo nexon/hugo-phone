@@ -1,0 +1,201 @@
+\chapter{Fase 3: DOSBox-Staging y Hugo}
+
+\section{Objetivo}
+
+Tener Hugo ejecutándose en la Pi, mostrado en pantalla por HDMI y jugable con teclado USB. Esta es la última pieza individual antes de unirlo todo en la Fase 4.
+
+\section{Estado legal del juego}
+
+Hugo es \emph{abandonware}: software comercial cuyo soporte por parte del editor original cesó hace décadas y cuya distribución pasiva es ampliamente tolerada aunque no formalmente autorizada. Sitios como \texttt{myabandonware.com} y \texttt{abandonwaregames.net} alojan copias descargables. La situación legal varía por jurisdicción, pero el uso doméstico y educativo no ha sido objeto de litigios.
+
+\section{Paso 1: Descargar Hugo}
+
+Desde la Mac, abrir en un navegador:
+
+\begin{plaincode}
+https://www.myabandonware.com/game/hugo-eya
+\end{plaincode}
+
+Descargar el archivo ZIP que ofrece el sitio. Una vez en \texttt{\~{}/Downloads/}, transferirlo a la Pi:
+
+\begin{shellcode}
+scp ~/Downloads/Hugo*.zip beto@hugo-pbx.local:/tmp/
+\end{shellcode}
+
+En la Pi, descomprimir al directorio del juego:
+
+\begin{shellcode}
+sudo mkdir -p /opt/hugo-phone/games/hugo
+sudo unzip /tmp/Hugo*.zip -d /opt/hugo-phone/games/hugo
+sudo chown -R beto:beto /opt/hugo-phone/games/hugo
+ls /opt/hugo-phone/games/hugo/
+\end{shellcode}
+
+Debería listarse \texttt{hugo.exe} (o un archivo similar). Algunas distribuciones traen un instalador \texttt{install.exe} que se debe ejecutar dentro de DOSBox la primera vez.
+
+\section{Paso 2: Verificar configuración de DOSBox-Staging}
+
+El script de instalación copió un \texttt{dosbox-staging.conf} optimizado para Hugo en la Pi. Verificar:
+
+\begin{shellcode}
+cat ~/.config/dosbox/dosbox-staging.conf | head -30
+\end{shellcode}
+
+Si el ejecutable del juego no se llama exactamente \texttt{hugo.exe}, editar la sección \texttt{[autoexec]}:
+
+\begin{shellcode}
+nano ~/.config/dosbox/dosbox-staging.conf
+\end{shellcode}
+
+La sección a ajustar es:
+
+\begin{plaincode}
+[autoexec]
+mount c /opt/hugo-phone/games
+c:
+cd hugo
+hugo.exe
+exit
+\end{plaincode}
+
+\section{Paso 3: Modos de salida gráfica}
+
+DOSBox-Staging puede dibujar de varias formas. En orden de simplicidad creciente:
+
+\subsection{Modo desarrollo: con escritorio ligero}
+
+Para pruebas y diagnóstico, instalar Openbox (un gestor de ventanas minimalista):
+
+\begin{shellcode}
+sudo apt install -y xinit openbox
+echo "exec openbox-session" > ~/.xinitrc
+startx /usr/games/dosbox-staging
+\end{shellcode}
+
+Esto inicia un servidor X11 con Openbox y lanza DOSBox-Staging dentro. Útil para experimentar.
+
+\subsection{Modo appliance: KMSDRM directo}
+
+Para la operación final, DOSBox-Staging puede dibujar directamente al framebuffer del kernel sin servidor X, lo cual reduce uso de memoria y elimina latencia de composición:
+
+\begin{shellcode}
+SDL_VIDEODRIVER=kmsdrm dosbox-staging
+\end{shellcode}
+
+\begin{nota}
+KMSDRM solo funciona desde una TTY local (no por SSH X-forwarding). Es el modo recomendado para la operación normal del appliance.
+\end{nota}
+
+\section{Paso 4: Arranque automático del juego}
+
+Configurar la Pi para que al encender entre directamente a Hugo, sin intervención del usuario.
+
+\subsection{Habilitar autologin en TTY1}
+
+\begin{shellcode}
+sudo raspi-config
+\end{shellcode}
+
+Navegar a: \textsf{System Options} $\to$ \textsf{Boot / Auto Login} $\to$ \textsf{Console Autologin}. Guardar y salir.
+
+\subsection{Ejecutar DOSBox al iniciar sesión}
+
+Editar el \texttt{.bashrc} del usuario \texttt{beto}:
+
+\begin{shellcode}
+nano ~/.bashrc
+\end{shellcode}
+
+Agregar al final:
+
+\begin{plaincode}
+if [ -z "$DISPLAY" ] && [ "$(tty)" = "/dev/tty1" ]; then
+  SDL_VIDEODRIVER=kmsdrm dosbox-staging
+fi
+\end{plaincode}
+
+La condición evita que DOSBox se ejecute si se ingresa al sistema por SSH o desde una TTY distinta de la 1.
+
+Al reiniciar, la secuencia debe ser:
+
+\begin{enumerate}
+  \item Boot del kernel
+  \item Autologin como \texttt{beto} en \texttt{tty1}
+  \item Ejecución de DOSBox-Staging en modo KMSDRM
+  \item Autoejecución de Hugo según \texttt{[autoexec]}
+\end{enumerate}
+
+\section{Paso 5: Prueba de jugabilidad}
+
+Con un teclado USB conectado a la Pi y Hugo cargado, probar:
+
+\begin{itemize}
+  \item Flechas direccionales $\to$ movimiento del personaje
+  \item Barra espaciadora $\to$ acción
+  \item \texttt{Esc} $\to$ menú/salir
+\end{itemize}
+
+Si Hugo se siente excesivamente rápido o lento, ajustar la línea \texttt{cycles} en \texttt{dosbox-staging.conf}:
+
+\begin{tomlcode}
+[cpu]
+cycles = fixed 8000   # Aumentar si va lento, disminuir si va rapido
+\end{tomlcode}
+
+Hugo original requería aproximadamente un 386SX a 25\,MHz. Empezar con \texttt{cycles = fixed 8000} y calibrar.
+
+\section{Paso 6: Salir limpiamente}
+
+Dos pulsaciones de \texttt{Esc} salen al menú de Hugo. La opción \emph{Quit} regresa al prompt de DOSBox; el comando \texttt{exit} del bloque \texttt{[autoexec]} cierra DOSBox automáticamente.
+
+Para salir de emergencia (por ejemplo si el juego se cuelga): \texttt{Ctrl}+\texttt{F9} es el \emph{kill switch} de DOSBox-Staging.
+
+\section{Resolución de problemas}
+
+\subsection{Hugo se cuelga en la intro o las cinemáticas}
+
+DOSBox-Staging en arquitectura ARM ocasionalmente tiene problemas con la decodificación de animaciones VGA. Pulsar cualquier tecla para saltar la intro suele resolverlo. Si persiste, bajar la resolución de salida:
+
+\begin{tomlcode}
+[sdl]
+windowresolution = 640x480
+\end{tomlcode}
+
+\subsection{El audio se entrecorta}
+
+Aumentar el buffer del mezclador:
+
+\begin{tomlcode}
+[mixer]
+prebuffer = 50
+blocksize = 2048
+\end{tomlcode}
+
+Si aún hay cortes, bajar la calidad: \texttt{rate = 22050}.
+
+\subsection{Pantalla negra al iniciar}
+
+Probablemente el driver KMSDRM no está disponible en la versión instalada de SDL2. Alternativas:
+
+\begin{shellcode}
+SDL_VIDEODRIVER=fbcon dosbox-staging
+\end{shellcode}
+
+O instalar el escritorio mínimo:
+
+\begin{shellcode}
+sudo apt install -y xinit openbox
+\end{shellcode}
+
+Y lanzar DOSBox dentro de \texttt{startx}.
+
+\subsection{Hugo arranca pero no responde al teclado}
+
+\begin{itemize}
+  \item Verificar que \texttt{core = dynamic} esté presente en la sección \texttt{[cpu]}.
+  \item Algunos títulos requieren \texttt{cputype = 386} en lugar de \texttt{486\_slow}.
+\end{itemize}
+
+\section{Cierre de fase}
+
+En este punto el juego corre con teclado USB. La siguiente fase reemplaza ese teclado USB por uno virtual controlado desde el teléfono.

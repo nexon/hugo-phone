@@ -1,0 +1,16 @@
+[Unit]
+Description=Hugo Phone DTMF → Keyboard Bridge
+After=asterisk.service network.target
+Requires=asterisk.service
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/hugo-phone/bridge
+ExecStart=/opt/hugo-phone/bridge/hugo-bridge --config /opt/hugo-phone/bridge/config.toml
+Restart=on-failure
+RestartSec=3
+Environment="RUST_LOG=info"
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,149 @@
+\chapter{Fase 2: Prueba SIP con softphone}
+
+\section{Objetivo}
+
+Validar la centralita Asterisk antes de tocar el HT801. Para ello se registra un \emph{softphone} (Linphone) como extensión 102, se llama al número 9000 y se confirma que los tonos DTMF marcados desde la app llegan a Asterisk en forma de eventos AMI.
+
+Este paso es importante porque permite verificar la parte de software del sistema sin depender aún del hardware analógico, simplificando el diagnóstico de problemas.
+
+\section{Paso 1: Instalar Linphone}
+
+Linphone es un cliente SIP gratuito y multiplataforma:
+
+\begin{itemize}
+  \item \textbf{iOS:} App Store, buscar \texttt{Linphone}.
+  \item \textbf{Android:} Google Play, buscar \texttt{Linphone}.
+  \item \textbf{macOS:} \texttt{linphone.org/technical-corner/linphone}.
+\end{itemize}
+
+Instalar la aplicación en cualquiera de los dispositivos disponibles que esté en la misma red local que la Pi.
+
+\section{Paso 2: Crear cuenta SIP en Linphone}
+
+Abrir Linphone y entrar al asistente: \textsf{Assistant} $\to$ \textsf{Use a SIP account} (o \textsf{Add Account}, según versión).
+
+Completar:
+
+\begin{table}[h]
+\centering
+\begin{tabular}{ll}
+\toprule
+\textbf{Campo} & \textbf{Valor} \\
+\midrule
+Username & 102 \\
+Password & el secreto definido para la extensión 102 en \texttt{sip.conf} \\
+Domain & 192.168.1.10 (IP de la Pi) \\
+Transport & UDP \\
+Display Name & Test Hugo \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Confirmar y verificar que el indicador de estado se ponga en verde con la leyenda \texttt{Registered} o \texttt{Connected}.
+
+\section{Paso 3: Verificar registro desde Asterisk}
+
+En la Pi:
+
+\begin{shellcode}
+sudo asterisk -rvvv
+\end{shellcode}
+
+Dentro del CLI:
+
+\begin{plaincode}
+hugo-pbx*CLI> sip show peers
+Name/username             Host                Status
+101/101                   (Unspecified)       UNKNOWN
+102/102                   192.168.1.20:xxxx   OK (3 ms)
+\end{plaincode}
+
+La extensión 102 debe aparecer con la IP del dispositivo donde corre Linphone y estado \texttt{OK}.
+
+\section{Paso 4: Llamada de prueba al 9000}
+
+Desde Linphone, marcar \texttt{9000} y presionar el botón de llamada.
+
+Se deben observar dos cosas simultáneamente:
+
+\begin{enumerate}
+  \item En el auricular del dispositivo: un \emph{beep} corto, producto del paso \texttt{Playback(beep)} en el dialplan.
+  \item En la consola de Asterisk: la traza de ejecución del dialplan.
+\end{enumerate}
+
+\begin{plaincode}
+-- Executing [9000@hugo-game:1] NoOp("PJSIP/102-...", "Hugo Phone — ...")
+-- Executing [9000@hugo-game:2] Answer("PJSIP/102-...", "")
+-- Executing [9000@hugo-game:3] Wait("PJSIP/102-...", "1")
+-- Executing [9000@hugo-game:4] Playback("PJSIP/102-...", "beep")
+-- <PJSIP/102-...> Playing 'beep.gsm' (language 'es')
+-- Executing [9000@hugo-game:5] Read("PJSIP/102-...", "TECLA,,1,,,3600")
+\end{plaincode}
+
+\section{Paso 5: Probar DTMF}
+
+Mientras la llamada sigue activa, en Linphone abrir el teclado de tonos y marcar el dígito \textbf{2}.
+
+En la consola de Asterisk se debe ver:
+
+\begin{plaincode}
+== Manager 'hugo-bridge' logged on from 127.0.0.1
+== UserEvent: HugoKey
+   Channel: PJSIP/102-00000001
+   Caller: 102
+   Key: 2
+-- Executing [9000@hugo-game:6] GotoIf(...)
+-- Executing [9000@hugo-game:5] Read("PJSIP/102-...", "TECLA,,1,,,3600")
+\end{plaincode}
+
+Repetir con \textbf{4}, \textbf{6}, \textbf{8} y \textbf{5}. Cada uno debe disparar su propio \texttt{UserEvent}.
+
+Si los eventos aparecen, la \textbf{Fase 2 está completa}: la centralita captura DTMF correctamente y el bridge podrá leerlos.
+
+\section{Resolución de problemas}
+
+\subsection{Linphone no se registra}
+
+\begin{itemize}
+  \item Verificar que la Pi sea alcanzable desde el dispositivo: \texttt{ping 192.168.1.10}.
+  \item Confirmar que el puerto UDP 5060 no esté bloqueado por firewall en la Pi (Raspberry Pi OS Lite no trae firewall activado por defecto).
+  \item Revisar logs de Asterisk en busca de intentos fallidos:
+  \begin{shellcode}
+sudo asterisk -rvvv
+hugo-pbx*CLI> sip set debug on
+  \end{shellcode}
+\end{itemize}
+
+\subsection{La llamada al 9000 se corta inmediatamente}
+
+\begin{itemize}
+  \item Verificar que la extensión 102 esté asignada al contexto \texttt{hugo-game} en \texttt{sip.conf}.
+  \item Ejecutar \texttt{dialplan show hugo-game} en el CLI y confirmar que la extensión 9000 está presente.
+\end{itemize}
+
+\subsection{Conecta pero no se escucha el beep}
+
+\begin{itemize}
+  \item Problema típico de NAT o de codecs incompatibles. Verificar que \texttt{allow=ulaw} y \texttt{allow=alaw} estén en \texttt{sip.conf} y que Linphone también soporte estos codecs en su configuración avanzada.
+  \item Revisar el volumen del dispositivo.
+\end{itemize}
+
+\subsection{No aparecen UserEvent al marcar DTMF}
+
+\begin{itemize}
+  \item Linphone puede enviar DTMF como tonos \emph{inband} en lugar de RFC 2833. En \textsf{Settings} $\to$ \textsf{Audio} $\to$ \textsf{DTMF mode} forzar el método \texttt{RFC 2833} o \texttt{SIP INFO}.
+  \item Confirmar que el archivo \texttt{sip.conf} tiene la línea \texttt{dtmfmode=rfc2833} para la extensión 102.
+\end{itemize}
+
+\section{Cierre de fase}
+
+En este punto está validado:
+
+\begin{itemize}
+  \item Asterisk acepta clientes SIP y los registra correctamente.
+  \item El dialplan responde llamadas y reproduce audio.
+  \item La función \texttt{Read()} captura DTMF en variable.
+  \item El \texttt{UserEvent} se emite y es visible en AMI.
+\end{itemize}
+
+Esto es todo lo que el bridge necesita del lado de Asterisk. La siguiente fase prepara DOSBox-Staging y Hugo para que el bridge tenga algo donde inyectar las teclas.

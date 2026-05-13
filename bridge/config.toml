@@ -1,0 +1,35 @@
+# Hugo Phone bridge — config
+#
+# Cualquier cambio aquí se recarga en caliente (excepto cambiar credenciales AMI,
+# que forzará una reconexión).
+
+[ami]
+host = "127.0.0.1"
+port = 5038
+username = "hugo-bridge"
+secret = "cambiame-ami"     # debe coincidir con /etc/asterisk/manager.conf
+
+[bridge]
+# Duración de cada "tap" en milisegundos.
+# Sube si Hugo no registra las pulsaciones; baja si registra duplicadas.
+press_duration_ms = 80
+# Nombre del UserEvent que dispara teclas (del dialplan).
+event_name = "HugoKey"
+# Campo dentro del UserEvent que trae el dígito DTMF.
+key_field = "Key"
+
+# Mapeo DTMF → tecla. Nombres simbólicos en keyboard.rs (Up, Down, Left, Right,
+# Space, Esc, Enter, Tab, A-Z, F1-F12, LeftShift, etc).
+[keymap]
+"2" = "Up"
+"4" = "Left"
+"6" = "Right"
+"8" = "Down"
+"5" = "Space"
+"0" = "Esc"
+"1" = "Q"
+"3" = "E"
+"7" = "Z"
+"9" = "X"
+"*" = "LeftShift"
+"#" = "Enter"

@@ -1,0 +1,90 @@
+\chapter{Introducción}
+
+\section{Motivación}
+
+A inicios de los años noventa, varios canales de televisión emitieron programas en horario infantil donde los espectadores controlaban un personaje en pantalla \emph{en directo} a través del teclado de su teléfono. El más famoso fue \textbf{Hugo}, un pequeño troll noruego creado por la compañía danesa ITE Media, que debía rescatar a su familia (Hugolina y sus hijos) de la malvada bruja Scylla. La transmisión llegó a más de cuarenta países y en Chile pasó por varios canales abiertos.
+
+El mecanismo era simple en apariencia y sofisticado en infraestructura: la productora del programa ponía a disposición una línea telefónica de pago, los niños llamaban, esperaban su turno escuchando música y el audio del juego, y al recibirlo controlaban a Hugo durante alrededor de un minuto presionando dígitos del teclado:
+
+\begin{itemize}
+  \item \textbf{2} para saltar o subir
+  \item \textbf{4} para moverse a la izquierda
+  \item \textbf{6} para moverse a la derecha
+  \item \textbf{8} para agacharse o bajar
+  \item \textbf{5} para acciones especiales
+\end{itemize}
+
+Cada pulsación generaba un tono \emph{DTMF} (\emph{Dual-Tone Multi-Frequency}) que la central del estudio decodificaba, traducía a un comando del juego y enviaba al PC que ejecutaba la versión interactiva de Hugo. La latencia ---comparable a la actual de un partido de fútbol transmitido por streaming--- formaba parte del encanto y del desafío.
+
+Treinta años después, todos los componentes de aquel sistema están disponibles como software libre o hardware de bajo costo, lo que permite reconstruir la experiencia completa de forma doméstica, offline y a una fracción del costo original. Este manual documenta paso a paso cómo hacerlo.
+
+\section{Objetivos del proyecto}
+
+\begin{enumerate}
+  \item Ejecutar \textbf{Hugo} (versión DOS, 1996) en una Raspberry Pi 4 (2\,GB) con salida HDMI a un televisor.
+  \item Conectar un \textbf{teléfono analógico DTMF} físico al sistema mediante un adaptador FXS (Grandstream HT801).
+  \item Implementar una \textbf{centralita telefónica local} en la misma Pi con Asterisk, sin requerir conexión a Internet ni servicios de telefonía externos.
+  \item Desarrollar un \textbf{puente (bridge)} en Rust que traduzca los tonos DTMF capturados por Asterisk a pulsaciones de teclado inyectadas al emulador DOSBox-Staging.
+  \item Documentar el sistema con un nivel de detalle que permita replicarlo, mantenerlo y extenderlo a un escenario \emph{multijugador} estilo televisión.
+\end{enumerate}
+
+\section{Decisiones de diseño}
+
+\subsection{¿Por qué Raspberry Pi 4?}
+
+La Pi 4 es lo suficientemente potente para correr Asterisk, DOSBox-Staging y el bridge simultáneamente, sin dejar de ser un \emph{appliance} compacto, silencioso, de bajo consumo (5--7\,W) y con salida HDMI directa. El modelo de 2\,GB es la opción más económica disponible y deja margen de RAM tras cargar todos los servicios.
+
+\subsection{¿Por qué Asterisk y no algo más ligero?}
+
+Asterisk es la implementación de PBX más usada y mejor documentada del ecosistema libre. Trae decodificación nativa de DTMF (RFC\,2833 e \emph{inband}), \emph{dialplan} extensible, \emph{Manager Interface} (AMI) para integración con software externo y soporte de \emph{ConfBridge} para conferencias \emph{multiparty}. Alternativas como \texttt{baresip} o \texttt{kamailio} son más livianas, pero no incluyen la decodificación DTMF de alto nivel ni el \emph{dialplan} que aquí se necesita.
+
+\subsection{¿Por qué Rust para el bridge?}
+
+El \emph{bridge} es el componente que recibe los eventos de DTMF desde Asterisk y los traduce a teclas virtuales mediante el subsistema \texttt{uinput} del kernel Linux. Las propiedades deseables son:
+
+\begin{itemize}
+  \item \textbf{Latencia mínima} y predictible: el usuario percibe cualquier retraso entre pulsar el teléfono y ver moverse al personaje.
+  \item \textbf{Bajo consumo de RAM}: la Pi de 2\,GB no tiene mucho margen una vez cargado DOSBox.
+  \item \textbf{Estabilidad}: el servicio debe correr indefinidamente sin reinicios.
+  \item \textbf{Sin dependencias de runtime}: ideal un binario único, sin entornos virtuales ni intérpretes.
+\end{itemize}
+
+Rust cumple las cuatro propiedades sin esfuerzo. El binario final pesa pocos megabytes y consume del orden de 3--5\,MB de RAM en operación.
+
+\subsection{¿Por qué DOSBox-Staging y no DOSBox-X?}
+
+DOSBox-Staging es un \emph{fork} moderno con mejoras de rendimiento en plataformas ARM, mantenimiento activo y compatibilidad con la mayoría de juegos DOS. Para Hugo (1996, motor sencillo basado en VGA y Sound Blaster) cualquiera de los \emph{forks} funciona, pero \emph{Staging} es la opción más cuidada actualmente para Raspberry Pi.
+
+\section{Estructura del manual}
+
+El documento se organiza en tres bloques:
+
+\begin{description}
+  \item[Bloque conceptual (capítulos 1--3):] introducción, arquitectura general del sistema y lista detallada de materiales (\emph{Bill of Materials}).
+  \item[Bloque de implementación (capítulos 4--8):] seis fases secuenciales, cada una con objetivo claro, pasos verificables y \emph{troubleshooting}. Cada fase se construye sobre la anterior.
+  \item[Bloque de referencia (capítulos 9--10):] visión futura del modo multijugador y referencia técnica completa (protocolos AMI, mapeo DTMF, comandos útiles).
+\end{description}
+
+\begin{nota}
+Las fases están diseñadas para validar incrementalmente. Si una fase falla, no se debe avanzar a la siguiente: el sistema solo se vuelve más difícil de depurar al sumar componentes sobre una base que aún no funciona.
+\end{nota}
+
+\section{Convenciones tipográficas}
+
+\begin{itemize}
+  \item Los \texttt{comandos de shell} y nombres de archivos se muestran en monoespaciado.
+  \item Los \emph{términos técnicos} introducidos por primera vez aparecen en cursiva.
+  \item Las cajas destacadas siguen este esquema:
+\end{itemize}
+
+\begin{nota}
+Las cajas de tipo \emph{Nota} aportan contexto adicional útil pero no crítico.
+\end{nota}
+
+\begin{advertencia}
+Las cajas de tipo \emph{Advertencia} señalan situaciones donde un error puede romper el sistema o requerir reinstalación.
+\end{advertencia}
+
+\begin{tip}
+Las cajas de tipo \emph{Tip} contienen atajos, trucos o decisiones aprendidas a partir de errores comunes.
+\end{tip}

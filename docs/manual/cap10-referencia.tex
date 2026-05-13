@@ -1,0 +1,231 @@
+\chapter{Referencia técnica}
+
+\section{Mapeo DTMF $\to$ teclado}
+
+\begin{table}[h]
+\centering
+\begin{tabular}{ccccp{5cm}}
+\toprule
+\textbf{DTMF} & \textbf{Frecuencias (Hz)} & \textbf{Tecla} & \textbf{Código evdev} & \textbf{Acción en Hugo} \\
+\midrule
+1 & 697 + 1209 & Q & KEY\_Q & libre / acción 1 \\
+2 & 697 + 1336 & $\uparrow$ & KEY\_UP & saltar o subir \\
+3 & 697 + 1477 & E & KEY\_E & libre / acción 2 \\
+4 & 770 + 1209 & $\leftarrow$ & KEY\_LEFT & izquierda \\
+5 & 770 + 1336 & Espacio & KEY\_SPACE & acción principal \\
+6 & 770 + 1477 & $\rightarrow$ & KEY\_RIGHT & derecha \\
+7 & 852 + 1209 & Z & KEY\_Z & libre / acción 3 \\
+8 & 852 + 1336 & $\downarrow$ & KEY\_DOWN & bajar / agacharse \\
+9 & 852 + 1477 & X & KEY\_X & libre / acción 4 \\
+* & 941 + 1209 & Shift Izq. & KEY\_LEFTSHIFT & modificador \\
+0 & 941 + 1336 & Esc & KEY\_ESC & pausa / menú \\
+\# & 941 + 1477 & Enter & KEY\_ENTER & confirmar \\
+\bottomrule
+\end{tabular}
+\caption{Mapeo DTMF $\to$ teclado por defecto.}
+\end{table}
+
+\section{Archivos clave del sistema}
+
+\begin{table}[h]
+\centering
+\small
+\begin{tabular}{p{0.45\textwidth} p{0.45\textwidth}}
+\toprule
+\textbf{Archivo} & \textbf{Función} \\
+\midrule
+\texttt{/etc/asterisk/sip.conf} & Define extensiones SIP 101 y 102 \\
+\texttt{/etc/asterisk/extensions.conf} & Dialplan: lógica del 9000 \\
+\texttt{/etc/asterisk/manager.conf} & Habilita AMI con usuario \texttt{hugo-bridge} \\
+\texttt{/etc/systemd/system/hugo-bridge.service} & Unit del servicio bridge \\
+\texttt{/etc/udev/rules.d/99-hugo-uinput.rules} & Permisos sobre \texttt{/dev/uinput} \\
+\texttt{/opt/hugo-phone/bridge/hugo-bridge} & Binario compilado del bridge \\
+\texttt{/opt/hugo-phone/bridge/config.toml} & Configuración del bridge (hot-reload) \\
+\texttt{/opt/hugo-phone/games/hugo/} & Archivos del juego \\
+\texttt{\textasciitilde/.config/dosbox/dosbox-staging.conf} & Configuración del emulador \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\section{Servicios y comandos útiles}
+
+\subsection{Gestión de Asterisk}
+
+\begin{shellcode}
+sudo systemctl status asterisk
+sudo systemctl restart asterisk
+sudo asterisk -rvvv               # consola interactiva
+sudo asterisk -rx "reload"        # recargar configs sin reiniciar
+\end{shellcode}
+
+Comandos dentro del CLI de Asterisk:
+
+\begin{plaincode}
+sip show peers              ; estado de extensiones
+sip show registry           ; clientes registrados
+sip set debug on/off        ; trazas detalladas
+dialplan show hugo-game     ; ver dialplan cargado
+manager show settings       ; estado de AMI
+manager show users          ; usuarios AMI
+manager show connected      ; sesiones AMI activas
+core show channels          ; llamadas activas
+\end{plaincode}
+
+\subsection{Gestión del bridge}
+
+\begin{shellcode}
+sudo systemctl status hugo-bridge
+sudo systemctl restart hugo-bridge
+sudo journalctl -u hugo-bridge -f      # logs en vivo
+sudo journalctl -u hugo-bridge -n 100  # ultimas 100 lineas
+\end{shellcode}
+
+\subsection{Recompilar el bridge}
+
+\begin{shellcode}
+cd /opt/hugo-phone/bridge
+sudo -u beto ~/.cargo/bin/cargo build --release
+sudo cp target/release/hugo-bridge ./hugo-bridge
+sudo systemctl restart hugo-bridge
+\end{shellcode}
+
+\subsection{Inspección del teclado virtual}
+
+\begin{shellcode}
+ls /dev/input/by-id/                   # buscar hugo-phone-...
+sudo evtest                            # seleccionar el dispositivo
+                                       # ver eventos al marcar DTMF
+\end{shellcode}
+
+\subsection{Verificación del HT801}
+
+\begin{shellcode}
+ping 192.168.1.11                      # alcanzabilidad IP
+nmap -p 5060 192.168.1.11              # puerto SIP abierto
+\end{shellcode}
+
+\section{Estructura del archivo \texttt{config.toml}}
+
+\begin{tomlcode}
+[ami]
+host = "127.0.0.1"
+port = 5038
+username = "hugo-bridge"
+secret = "PASSWORD-REAL"
+
+[bridge]
+press_duration_ms = 80
+event_name = "HugoKey"
+key_field = "Key"
+
+[keymap]
+"2" = "Up"
+"4" = "Left"
+"6" = "Right"
+"8" = "Down"
+"5" = "Space"
+"0" = "Esc"
+"1" = "Q"
+"3" = "E"
+"7" = "Z"
+"9" = "X"
+"*" = "LeftShift"
+"#" = "Enter"
+\end{tomlcode}
+
+\section{Nombres de teclas soportados}
+
+El parser de \texttt{keyboard.rs} reconoce:
+
+\begin{itemize}
+  \item \textbf{Direccionales:} \texttt{Up}, \texttt{Down}, \texttt{Left}, \texttt{Right}
+  \item \textbf{Especiales:} \texttt{Space}, \texttt{Enter}, \texttt{Esc} (o \texttt{Escape}), \texttt{Tab}, \texttt{Backspace}
+  \item \textbf{Modificadores:} \texttt{LeftShift}, \texttt{RightShift}, \texttt{LeftCtrl}, \texttt{RightCtrl}, \texttt{LeftAlt}, \texttt{RightAlt}
+  \item \textbf{Letras:} \texttt{A} a \texttt{Z}
+  \item \textbf{Función:} \texttt{F1} a \texttt{F12}
+\end{itemize}
+
+Si se asigna un nombre no reconocido, el bridge registra un warning en los logs pero sigue funcionando.
+
+\section{Anatomía del protocolo AMI}
+
+\subsection{Banner inicial}
+
+\begin{plaincode}
+Asterisk Call Manager/9.0.0
+\end{plaincode}
+
+\subsection{Login}
+
+\begin{plaincode}
+Action: Login
+Username: hugo-bridge
+Secret: PASSWORD-REAL
+Events: user,call
+(linea en blanco)
+\end{plaincode}
+
+\subsection{Respuesta exitosa de login}
+
+\begin{plaincode}
+Response: Success
+Message: Authentication accepted
+(linea en blanco)
+\end{plaincode}
+
+\subsection{UserEvent producido por el dialplan}
+
+\begin{plaincode}
+Event: UserEvent
+Privilege: user,all
+UserEvent: HugoKey
+Channel: PJSIP/101-00000003
+Caller: 101
+Key: 2
+Uniqueid: 1715641234.3
+(linea en blanco)
+\end{plaincode}
+
+\section{Glosario}
+
+\begin{description}
+  \item[AMI] \emph{Asterisk Manager Interface}. Protocolo TCP de texto plano para controlar Asterisk desde clientes externos.
+  \item[ATA] \emph{Analog Telephone Adapter}. Dispositivo que convierte una línea analógica a SIP.
+  \item[DOSBox] Emulador del sistema operativo MS-DOS y del hardware del PC compatible. DOSBox-Staging es un fork modernizado.
+  \item[DTMF] \emph{Dual-Tone Multi-Frequency}. Sistema de señalización por pares de tonos, usado por los teclados telefónicos.
+  \item[evdev] Subsistema del kernel Linux que expone dispositivos de entrada a \emph{user space}.
+  \item[FXO] \emph{Foreign eXchange Office}. Puerto que se conecta a una central como si fuera un teléfono.
+  \item[FXS] \emph{Foreign eXchange Subscriber}. Puerto que entrega línea como si fuera la compañía telefónica.
+  \item[KMSDRM] \emph{Kernel Mode Setting / Direct Rendering Manager}. Capa del kernel Linux que permite dibujar directamente a la pantalla sin servidor X.
+  \item[PBX] \emph{Private Branch Exchange}. Centralita telefónica privada.
+  \item[RFC 2833] Estándar para transportar tonos DTMF dentro de paquetes RTP, fuera del audio principal.
+  \item[RTP] \emph{Real-time Transport Protocol}. Protocolo para transmitir audio y video en tiempo real, sobre UDP.
+  \item[SIP] \emph{Session Initiation Protocol}. Protocolo de señalización para iniciar, mantener y terminar sesiones de voz/video.
+  \item[uinput] Subsistema del kernel Linux que permite crear dispositivos de entrada virtuales desde \emph{user space}.
+\end{description}
+
+\section{Referencias externas}
+
+\begin{itemize}
+  \item Documentación oficial de Asterisk: \texttt{wiki.asterisk.org}
+  \item DOSBox-Staging: \texttt{dosbox-staging.github.io}
+  \item Crate \texttt{uinput} de Rust: \texttt{docs.rs/uinput}
+  \item Tokio: \texttt{tokio.rs}
+  \item Grandstream HT801 manual: \texttt{grandstream.com/products}
+  \item Raspberry Pi documentation: \texttt{raspberrypi.com/documentation}
+  \item Hugo en MyAbandonware: \texttt{myabandonware.com/game/hugo-eya}
+\end{itemize}
+
+\section{Créditos}
+
+Hugo, el personaje y la franquicia, son propiedad de \textbf{ITE Media ApS} (originalmente \emph{Interactive Television Entertainment}), Dinamarca. Este proyecto es un homenaje técnico sin fines de lucro y sin afiliación oficial con la compañía.
+
+El sistema completo, su código y su documentación fueron desarrollados como proyecto personal por \textbf{Beto} en colaboración con Claude (Anthropic) durante mayo de 2026.
+
+\vspace{1cm}
+
+\begin{center}
+\itshape\small
+``Hugo, ¡cuidado con la roca!''\\
+--- Generaciones de niños chilenos en los noventa
+\end{center}

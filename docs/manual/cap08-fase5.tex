@@ -1,0 +1,211 @@
+\chapter{Fase 5: Conectar el teléfono real}
+
+\section{Objetivo}
+
+Reemplazar el softphone por un teléfono analógico DTMF físico, conectado a la centralita a través del adaptador Grandstream HT801. Al terminar esta fase, descolgar el teléfono debe llevar directamente al juego, sin marcar ningún número.
+
+\section{Conceptos previos}
+
+\subsection{Qué es un puerto FXS}
+
+Un puerto \emph{FXS (Foreign eXchange Subscriber)} es el tipo de puerto que provee la compañía telefónica al usuario doméstico: entrega voltaje continuo de aproximadamente 48\,V para alimentar el teléfono, voltaje alterno de unos 90\,V para hacerlo sonar, y mediante el \emph{loop current} detecta cuándo se descuelga o cuelga el aparato.
+
+Un puerto \emph{FXO (Foreign eXchange Office)} es el opuesto: se conecta hacia una central telefónica y se comporta como un teléfono.
+
+El HT801 expone un puerto FXS por su conector RJ11, lo cual permite enchufar cualquier teléfono analógico como si la central fuera la compañía telefónica.
+
+\subsection{Auto-dial al descolgar}
+
+La función \emph{Off-hook Auto-Dial} del HT801 permite configurar un número que se marcará automáticamente al descolgar el teléfono. Esta es la clave para replicar la experiencia Hugo: el usuario descuelga e inmediatamente está jugando, sin necesidad de marcar nada.
+
+\section{Conexiones físicas}
+
+\begin{center}
+\begin{tikzpicture}[
+  node distance=2cm,
+  every node/.style={font=\small},
+  box/.style={draw=hugoblue, thick, rounded corners=4pt, fill=hugoblue!10, align=center}
+]
+  \node[box, minimum width=2.8cm, minimum height=1.2cm] (phone) at (0,0) {Teléfono\\analógico};
+  \node[box, minimum width=2.8cm, minimum height=1.2cm] (ata) at (5,0) {HT801};
+  \node[box, minimum width=2.8cm, minimum height=1.2cm] (router) at (5,-2.5) {Router LAN};
+  \node[box, minimum width=2.8cm, minimum height=1.2cm] (pi) at (10,-2.5) {Raspberry Pi};
+
+  \draw[->, thick, hugoaccent] (phone) -- node[above,font=\tiny] {RJ11 (PHONE)} (ata);
+  \draw[->, thick, hugoaccent] (ata) -- node[right,font=\tiny] {RJ45 (LAN)} (router);
+  \draw[<-, thick, hugoaccent] (router) -- (pi);
+
+  \node[below=0.3cm of ata, font=\tiny, color=gray] {alim. 5V};
+  \node[below=0.3cm of phone, font=\tiny, color=gray] {sin alim. externa};
+\end{tikzpicture}
+\end{center}
+
+\begin{itemize}
+  \item El cable RJ11 del teléfono va al puerto rotulado \textbf{PHONE} (o \textbf{FXS}) del HT801. \emph{No} al puerto LAN.
+  \item El HT801 va por Ethernet al mismo switch/router donde está la Pi.
+  \item La fuente del HT801 (5\,V) se conecta al puerto correspondiente.
+  \item El teléfono analógico no necesita alimentación externa: la línea le provee voltaje.
+\end{itemize}
+
+\section{Paso 1: Descubrir la IP del HT801}
+
+El HT801 obtiene IP por DHCP automáticamente. Para conocerla hay dos métodos:
+
+\subsection{Método A: IVR del propio HT801}
+
+\begin{enumerate}
+  \item Descolgar el teléfono conectado al HT801.
+  \item Marcar \texttt{***} (tres asteriscos).
+  \item Una voz en inglés ofrece un menú de opciones de diagnóstico.
+  \item Marcar \texttt{02} para escuchar la IP del dispositivo.
+\end{enumerate}
+
+\subsection{Método B: panel del router}
+
+Entrar al panel de administración del router y buscar en la lista de clientes DHCP un dispositivo nuevo con nombre similar a \texttt{GS\_HT801} o \texttt{HT801-xxxx}.
+
+Una vez identificada la IP (supongamos \texttt{192.168.1.11}), \textbf{reservar} esa IP para la MAC del HT801 en el router, igual que se hizo con la Pi.
+
+\section{Paso 2: Acceder al panel web del HT801}
+
+Desde la Mac, abrir en el navegador:
+
+\begin{plaincode}
+http://192.168.1.11
+\end{plaincode}
+
+Credenciales:
+
+\begin{itemize}
+  \item \textbf{Usuario:} \texttt{admin}
+  \item \textbf{Contraseña:} \texttt{admin} (modelos antiguos) o la contraseña impresa en la etiqueta inferior del dispositivo (modelos recientes con contraseña única por unidad).
+\end{itemize}
+
+\begin{advertencia}
+Cambiar la contraseña por defecto antes de hacer cualquier otra cosa: \textsf{Advanced Settings} $\to$ \textsf{Admin Password}.
+\end{advertencia}
+
+\section{Paso 3: Configurar la cuenta SIP}
+
+Navegar a la pestaña \textsf{FXS Port} (o \textsf{Profile 1} en algunos firmwares).
+
+\begin{table}[h]
+\centering
+\begin{tabular}{ll}
+\toprule
+\textbf{Campo} & \textbf{Valor} \\
+\midrule
+Account Active & Yes \\
+Primary SIP Server & 192.168.1.10 (IP de la Pi) \\
+SIP User ID & 101 \\
+Authenticate ID & 101 \\
+Authenticate Password & el secreto de 101 en \texttt{sip.conf} \\
+Name & Telefono Hugo 1 \\
+DTMF Payload Type & 101 \\
+Preferred DTMF method & RFC2833 (priority 1) \\
+SIP Registration & Yes \\
+Outgoing call without registration & No \\
+NAT Traversal & No \\
+\bottomrule
+\end{tabular}
+\caption{Configuración SIP del HT801.}
+\end{table}
+
+En la sección de codecs:
+
+\begin{itemize}
+  \item Choice 1: \texttt{PCMU} (G.711 $\mu$-law)
+  \item Choice 2: \texttt{PCMA} (G.711 A-law)
+  \item Resto: \texttt{None}
+\end{itemize}
+
+\section{Paso 4: Configurar Auto-Dial}
+
+En la misma pestaña, buscar el campo \texttt{Offhook Auto-Dial} y configurarlo en:
+
+\begin{plaincode}
+9000
+\end{plaincode}
+
+Esto provoca que al descolgar el teléfono, el HT801 marque automáticamente al \texttt{9000}, que es la extensión que el dialplan asocia con el juego.
+
+Hacer clic en \textsf{Update} y luego en \textsf{Apply}. El HT801 reinicia su módulo SIP y queda registrado al cabo de unos 10 segundos.
+
+\section{Paso 5: Verificar registro}
+
+En la Pi:
+
+\begin{shellcode}
+sudo asterisk -rvvv
+\end{shellcode}
+
+\begin{plaincode}
+hugo-pbx*CLI> sip show peers
+Name/username             Host                Status
+101/101                   192.168.1.11        OK (5 ms)
+102/102                   (Unspecified)       UNKNOWN
+\end{plaincode}
+
+La extensión 101 debe aparecer con la IP del HT801 y estado \texttt{OK}. Si dice \texttt{UNREACHABLE} o el campo Host aparece vacío, verificar:
+
+\begin{itemize}
+  \item Coincidencia de contraseñas entre HT801 y \texttt{sip.conf}.
+  \item Que la IP de \emph{Primary SIP Server} apunte realmente a la Pi.
+  \item Los logs detallados:
+  \begin{shellcode}
+hugo-pbx*CLI> sip set debug on
+  \end{shellcode}
+\end{itemize}
+
+\section{Paso 6: La prueba final}
+
+Todas las piezas están conectadas. La secuencia:
+
+\begin{enumerate}
+  \item Confirmar que DOSBox-Staging muestra Hugo en la TV.
+  \item Confirmar que el servicio bridge está activo: \texttt{systemctl status hugo-bridge}.
+  \item \textbf{Descolgar el teléfono.}
+  \item En el auricular debe escucharse el beep del dialplan (después de un breve momento mientras el HT801 marca 9000 internamente).
+  \item Marcar \textbf{2}. Hugo salta.
+  \item Marcar \textbf{4}, \textbf{6}, \textbf{8}, \textbf{5} y jugar normalmente.
+  \item Al colgar el teléfono, la llamada finaliza limpiamente.
+\end{enumerate}
+
+Si todo funciona, el sistema está completo en su configuración mínima. El proyecto Hugo Phone está vivo.
+
+\section{Resolución de problemas}
+
+\subsection{El teléfono no da tono al descolgar}
+
+El HT801 no está dando línea. Causas posibles:
+
+\begin{itemize}
+  \item LED del puerto FXS en rojo: error de hardware o configuración. Hacer un \emph{factory reset} (botón Reset físico presionado 7 segundos).
+  \item Cable RJ11 en mal estado o invertido (probar otro).
+  \item Teléfono dañado (probar con otro teléfono).
+\end{itemize}
+
+\subsection{Hay tono pero al descolgar no marca el 9000}
+
+\emph{Offhook Auto-Dial} no está bien configurado. Verificar que sea exactamente \texttt{9000} sin espacios, sin asteriscos, sin numerales.
+
+\subsection{Conecta pero no se escucha el beep}
+
+Problema de codecs:
+
+\begin{itemize}
+  \item Asegurar que el HT801 prioriza \texttt{PCMU} y \texttt{PCMA}.
+  \item En el HT801, sección \emph{Audio Settings}, subir las ganancias \emph{Tx} y \emph{Rx} si el volumen es muy bajo.
+\end{itemize}
+
+\subsection{Los DTMF no producen acción en Hugo}
+
+\begin{itemize}
+  \item Verificar el método DTMF en el HT801: debe ser \texttt{RFC2833}.
+  \item En \texttt{sudo asterisk -rvvv} debe aparecer el \texttt{UserEvent: HugoKey} al pulsar dígitos.
+  \item Algunos HT801 antiguos fallan con RFC 2833 y requieren cambiar a \texttt{SIP INFO}. Probar ese método si el anterior no funciona.
+\end{itemize}
+
+\subsection{La llamada se cae sola después de algunos minutos}
+
+El dialplan tiene un timeout de 3600 segundos (1 hora) en \texttt{Read()}. Si la llamada cae antes, probablemente un \emph{session timer} está activo. Verificar en \texttt{sip.conf} la línea \texttt{session-timers=refuse}.
