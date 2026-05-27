@@ -4,7 +4,7 @@
 #
 # Uso: sudo bash scripts/install-all.sh
 #
-# Instala: Asterisk, DOSBox-Staging, Rust toolchain, compila el bridge,
+# Instala: Asterisk, DOSBox, Rust toolchain, compila el bridge,
 # configura servicio systemd, copia configs.
 
 set -euo pipefail
@@ -32,7 +32,7 @@ apt upgrade -y
 #echo "==> Instalando paquetes base..."
 #apt install -y \
 #  asterisk asterisk-modules \
-#  dosbox-staging \
+#  dosbox \
 #  build-essential pkg-config \
 #  libudev-dev \
 #  xserver-xorg xinit openbox \
@@ -42,17 +42,17 @@ apt upgrade -y
 #echo "==> Instalando paquetes de dosbox.."
 #apt install -y \
 #   xserver-xorg xinit openbox \
-#   dosbox-staging \
+#   dosbox \
 #   alsa-utils
 
 # ------------------------------------------------------------------
-# 2. Asterisk configs
+# 2. Asterisk configs (Asterisk 22 — chan_pjsip, ya no chan_sip)
 # ------------------------------------------------------------------
 echo "==> Copiando configs Asterisk..."
-cp "$REPO_DIR/config/asterisk/sip.conf"        /etc/asterisk/sip.conf
+cp "$REPO_DIR/config/asterisk/pjsip.conf"      /etc/asterisk/pjsip.conf
 cp "$REPO_DIR/config/asterisk/extensions.conf" /etc/asterisk/extensions.conf
 cp "$REPO_DIR/config/asterisk/manager.conf"    /etc/asterisk/manager.conf
-chown nexon:nexon /etc/asterisk/*.conf
+chown asterisk:asterisk /etc/asterisk/*.conf
 chmod 640 /etc/asterisk/*.conf
 
 systemctl enable asterisk
@@ -112,10 +112,11 @@ systemctl enable hugo-bridge
 # ------------------------------------------------------------------
 # 7. Config DOSBox
 # ------------------------------------------------------------------
-mkdir -p "$BUILD_HOME/.config/dosbox"
-cp "$REPO_DIR/config/dosbox/dosbox-hugo.conf" "$BUILD_HOME/.config/dosbox/dosbox-staging.conf"
-mkdir -p "$INSTALL_DIR/games/hugo"
-chown -R "$BUILD_USER:$BUILD_USER" "$BUILD_HOME/.config/dosbox" "$INSTALL_DIR/games"
+# El config vive en /opt/hugo-phone/games/ y se invoca con `dosbox -conf …`.
+# Así evitamos depender del path por versión de DOSBox (~/.dosbox/dosbox-X.Y.Z.conf).
+mkdir -p "$INSTALL_DIR/games"
+cp "$REPO_DIR/config/dosbox/dosbox-hugo.conf" "$INSTALL_DIR/games/dosbox-hugo.conf"
+chown -R "$BUILD_USER:$BUILD_USER" "$INSTALL_DIR/games"
 
 echo ""
 echo "============================================================"
@@ -124,7 +125,7 @@ echo "============================================================"
 echo ""
 echo "Pasos siguientes:"
 echo "  1. Editar secretos (que coincidan entre sí):"
-echo "       sudo nano /etc/asterisk/sip.conf"
+echo "       sudo nano /etc/asterisk/pjsip.conf"
 echo "       sudo nano /etc/asterisk/manager.conf"
 echo "       sudo nano $INSTALL_DIR/bridge/config.toml"
 echo "  2. sudo systemctl restart asterisk"

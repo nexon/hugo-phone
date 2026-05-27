@@ -5,9 +5,9 @@ Sistema offline para jugar Hugo (DOS) con un teléfono analógico antiguo vía D
 ## Stack
 
 - **Raspberry Pi 4 (2GB)** con Raspberry Pi OS Lite 64-bit
-- **Asterisk 20** como PBX (decodificación DTMF + dialplan)
+- **Asterisk 22** como PBX (decodificación DTMF + dialplan, vía chan_pjsip)
 - **Bridge en Rust** (binario nativo ARM, sin runtime) que escucha AMI e inyecta teclas vía `/dev/uinput`
-- **DOSBox-Staging** corriendo Hugo, salida HDMI
+- **DOSBox** (clásico) corriendo Hugo, salida HDMI
 - **Grandstream HT801** (ATA, 1 puerto FXS) + teléfono analógico DTMF
 
 ## Arquitectura
@@ -21,7 +21,7 @@ Sistema offline para jugar Hugo (DOS) con un teléfono analógico antiguo vía D
                             │  ├── Asterisk (PBX, AMI)       │
                             │  ├── hugo-bridge (Rust)        │
                             │  │     AMI → /dev/uinput       │
-                            │  └── DOSBox-Staging + Hugo     │
+                            │  └── DOSBox + Hugo             │
                             └────────────┬───────────────────┘
                                          │ HDMI
                                          ▼
@@ -45,7 +45,7 @@ Configurable en `bridge/config.toml` (hot-reload sin restart).
 
 1. [Fase 1: Preparar la Pi e instalar Asterisk](docs/fase1-pi-asterisk.md)
 2. [Fase 2: Extensión SIP, probar con softphone](docs/fase2-sip-softphone.md)
-3. [Fase 3: DOSBox-Staging + Hugo](docs/fase3-dosbox-hugo.md)
+3. [Fase 3: DOSBox + Hugo](docs/fase3-dosbox-hugo.md)
 4. [Fase 4: Bridge Rust DTMF → teclado](docs/fase4-bridge-rust.md)
 5. [Fase 5: Conectar HT801 + teléfono real](docs/fase5-ht801.md)
 6. [Fase 6 (futuro): Multi-jugador](docs/fase6-multijugador.md)
@@ -57,7 +57,7 @@ hugo-phone/
 ├── README.md
 ├── config/
 |   |-- asterisk/                  # /etc/asterisk/
-│      ├── sip.conf
+│      ├── pjsip.conf
 │      ├── extensions.conf
 │      └── manager.conf
 |   ├── dosbox/
@@ -94,7 +94,7 @@ cd hugo-phone
 sudo bash scripts/install-all.sh
 ```
 
-El script instala Asterisk, DOSBox-Staging, Rust toolchain, compila el bridge (~5-8 min), configura systemd y deja todo cableado.
+El script instala Asterisk, DOSBox, Rust toolchain, compila el bridge (~5-8 min), configura systemd y deja todo cableado.
 
 Luego seguir las guías por fase para terminar de configurar y testear.
 

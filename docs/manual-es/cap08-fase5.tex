@@ -99,7 +99,7 @@ Account Active & Yes \\
 Primary SIP Server & 192.168.1.10 (IP de la Pi) \\
 SIP User ID & 101 \\
 Authenticate ID & 101 \\
-Authenticate Password & el secreto de 101 en \texttt{sip.conf} \\
+Authenticate Password & el secreto de 101 en \texttt{pjsip.conf} \\
 Name & Telefono Hugo 1 \\
 DTMF Payload Type & 101 \\
 Preferred DTMF method & RFC2833 (priority 1) \\
@@ -140,20 +140,20 @@ sudo asterisk -rvvv
 \end{shellcode}
 
 \begin{plaincode}
-hugo-pbx*CLI> sip show peers
-Name/username             Host                Status
-101/101                   192.168.1.11        OK (5 ms)
-102/102                   (Unspecified)       UNKNOWN
+hugo-pbx*CLI> pjsip show contacts
+ Contact:  <Aor/ContactUri............................>  <Hash....> <Status> <RTT(ms)..>
+========================================================================================
+ Contact:  101/sip:101@192.168.1.11:5060                  abcdef0123 Avail        5.000
 \end{plaincode}
 
-La extensión 101 debe aparecer con la IP del HT801 y estado \texttt{OK}. Si dice \texttt{UNREACHABLE} o el campo Host aparece vacío, verificar:
+La extensión 101 debe aparecer con la IP del HT801 y estado \texttt{Avail}. Si dice \texttt{Unavail} o el contacto no aparece, verificar:
 
 \begin{itemize}
-  \item Coincidencia de contraseñas entre HT801 y \texttt{sip.conf}.
+  \item Coincidencia de contraseñas entre HT801 y \texttt{pjsip.conf}.
   \item Que la IP de \emph{Primary SIP Server} apunte realmente a la Pi.
   \item Los logs detallados:
   \begin{shellcode}
-hugo-pbx*CLI> sip set debug on
+hugo-pbx*CLI> pjsip set logger on
   \end{shellcode}
 \end{itemize}
 
@@ -162,7 +162,7 @@ hugo-pbx*CLI> sip set debug on
 Todas las piezas están conectadas. La secuencia:
 
 \begin{enumerate}
-  \item Confirmar que DOSBox-Staging muestra Hugo en la TV.
+  \item Confirmar que DOSBox muestra Hugo en la TV.
   \item Confirmar que el servicio bridge está activo: \texttt{systemctl status hugo-bridge}.
   \item \textbf{Descolgar el teléfono.}
   \item En el auricular debe escucharse el beep del dialplan (después de un breve momento mientras el HT801 marca 9000 internamente).
@@ -208,4 +208,4 @@ Problema de codecs:
 
 \subsection{La llamada se cae sola después de algunos minutos}
 
-El dialplan tiene un timeout de 3600 segundos (1 hora) en \texttt{Read()}. Si la llamada cae antes, probablemente un \emph{session timer} está activo. Verificar en \texttt{sip.conf} la línea \texttt{session-timers=refuse}.
+El dialplan tiene un timeout de 3600 segundos (1 hora) en \texttt{Read()}. Si la llamada cae antes, probablemente un \emph{session timer} está activo. Verificar en \texttt{pjsip.conf} que la plantilla \texttt{endpoint-template} tenga \texttt{timers=no} (equivalente PJSIP de \texttt{session-timers=refuse}).

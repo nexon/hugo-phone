@@ -21,9 +21,9 @@ Esta fase describe el diseño para escalar el sistema a esa experiencia completa
 
 \section{Cambios en Asterisk}
 
-\subsection{sip.conf: nuevas extensiones}
+\subsection{pjsip.conf: nuevas extensiones}
 
-Agregar extensiones 102, 103, 104 según número de puertos FXS, siguiendo el mismo patrón que la 101 ya documentada.
+Agregar extensiones 102, 103, 104 según número de puertos FXS, replicando el bloque de \texttt{endpoint}/\texttt{auth}/\texttt{aor} que usa la 101 (heredando \texttt{endpoint-template}).
 
 \subsection{confbridge.conf: salas de conferencia}
 
@@ -78,7 +78,7 @@ Solo el jugador activo debe poder controlar al personaje. Esto se logra haciendo
 
 \section{Audio del juego en la conferencia}
 
-Para que los jugadores en espera escuchen Hugo, hay que enrutar el audio de DOSBox-Staging hacia la sala de conferencia.
+Para que los jugadores en espera escuchen Hugo, hay que enrutar el audio de DOSBox hacia la sala de conferencia.
 
 \subsection{Camino A: ALSA loopback}
 
@@ -86,7 +86,7 @@ Para que los jugadores en espera escuchen Hugo, hay que enrutar el audio de DOSB
 sudo modprobe snd-aloop
 \end{shellcode}
 
-Crea un dispositivo virtual \texttt{hw:Loopback,0}. DOSBox-Staging se configura para sacar audio a ese dispositivo. Asterisk abre el otro extremo del loopback como un canal de entrada y lo \emph{bridge}a a la sala.
+Crea un dispositivo virtual \texttt{hw:Loopback,0}. DOSBox se configura para sacar audio a ese dispositivo. Asterisk abre el otro extremo del loopback como un canal de entrada y lo \emph{bridge}a a la sala.
 
 \subsection{Camino B: PipeWire}
 

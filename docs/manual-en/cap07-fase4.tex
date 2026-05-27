@@ -180,7 +180,7 @@ Reads line by line until it finds a blank line, at which point it considers the 
 
 \section{The \texttt{keyboard.rs} module}
 
-The Linux kernel's \texttt{uinput} subsystem lets a \emph{user space} process create virtual input devices. The kernel exposes them just like any physical keyboard under \texttt{/dev/input/eventXX} and applications like DOSBox-Staging cannot tell them apart from real hardware.
+The Linux kernel's \texttt{uinput} subsystem lets a \emph{user space} process create virtual input devices. The kernel exposes them just like any physical keyboard under \texttt{/dev/input/eventXX} and applications like DOSBox cannot tell them apart from real hardware.
 
 \subsection{Creating the virtual keyboard}
 
@@ -274,7 +274,7 @@ sudo evtest
 
 \section{The complete flow with the softphone}
 
-With the bridge running, DOSBox-Staging showing Hugo on the TV and Linphone registered:
+With the bridge running, DOSBox showing Hugo on the TV and Linphone registered:
 
 \begin{enumerate}
   \item Dial \texttt{9000} from Linphone.
@@ -352,7 +352,7 @@ sudo journalctl -u hugo-bridge -f
 \subsection{DTMFs reach the bridge but Hugo doesn't respond}
 
 \begin{itemize}
-  \item DOSBox-Staging requires window focus. If it was launched over SSH with X-forwarding, it loses focus.
+  \item DOSBox requires window focus. If it was launched over SSH with X-forwarding, it loses focus.
   \item Test the injection against another application: with the bridge running, open \texttt{nano} on the DOSBox TTY and verify that the cursor moves when you press DTMF.
 \end{itemize}
 

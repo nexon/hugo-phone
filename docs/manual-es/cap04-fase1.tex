@@ -8,7 +8,7 @@ Al final de esta fase, la Raspberry Pi debe estar:
   \item Booteando con Raspberry Pi OS Lite (64-bit).
   \item Accesible por SSH desde la Mac de trabajo.
   \item Con IP estática reservada en el router.
-  \item Con Asterisk 20 instalado y respondiendo en su CLI.
+  \item Con Asterisk 22 instalado y respondiendo en su CLI (módulo \texttt{chan\_pjsip}).
   \item Con los archivos de configuración del proyecto colocados en \texttt{/etc/asterisk/}.
 \end{itemize}
 
@@ -128,13 +128,13 @@ El script realiza, en orden:
 
 \begin{enumerate}
   \item \texttt{apt update \&\& apt upgrade} completos.
-  \item Instalación de Asterisk 20, DOSBox-Staging, \texttt{build-essential}, \texttt{libudev-dev} y demás dependencias.
-  \item Copia de los archivos \texttt{sip.conf}, \texttt{extensions.conf} y \texttt{manager.conf} a \texttt{/etc/asterisk/} con permisos correctos.
+  \item Instalación de Asterisk 22, DOSBox, \texttt{build-essential}, \texttt{libudev-dev} y demás dependencias.
+  \item Copia de los archivos \texttt{pjsip.conf}, \texttt{extensions.conf} y \texttt{manager.conf} a \texttt{/etc/asterisk/} con permisos correctos.
   \item Instalación de \emph{rustup} en el usuario \texttt{beto} (descarga e instalación de la toolchain estable).
   \item Compilación del bridge en modo \texttt{release}, con LTO y \texttt{strip}.
   \item Creación de la regla \texttt{udev} para \texttt{/dev/uinput} y carga del módulo del kernel.
   \item Instalación del servicio \texttt{systemd} \texttt{hugo-bridge.service}.
-  \item Despliegue de la configuración de DOSBox-Staging en \texttt{\~{}/.config/dosbox/}.
+  \item Despliegue de la configuración de DOSBox en \texttt{/opt/hugo-phone/games/dosbox-hugo.conf} (se invoca con \texttt{dosbox -conf}).
 \end{enumerate}
 
 La fase más lenta es la compilación del bridge, que en una Pi 4 toma entre 5 y 8 minutos. Tiempo total estimado: 20--30 minutos según velocidad de red.
@@ -144,7 +144,7 @@ La fase más lenta es la compilación del bridge, que en una Pi 4 toma entre 5 y
 Las contraseñas iniciales son placeholders y deben reemplazarse antes de cualquier uso real:
 
 \begin{shellcode}
-sudo nano /etc/asterisk/sip.conf
+sudo nano /etc/asterisk/pjsip.conf
 sudo nano /etc/asterisk/manager.conf
 sudo nano /opt/hugo-phone/bridge/config.toml
 \end{shellcode}
@@ -172,10 +172,10 @@ sudo asterisk -rvvv
 Dentro del CLI ejecutar:
 
 \begin{plaincode}
-hugo-pbx*CLI> sip show peers
+hugo-pbx*CLI> pjsip show endpoints
 \end{plaincode}
 
-Debe listar las extensiones 101 y 102 (esta última se usará en la siguiente fase) con estado \texttt{Unmonitored} (sin clientes registrados aún).
+Debe listar las extensiones 101 y 102 (esta última se usará en la siguiente fase) con estado \texttt{Not in use} (sin clientes registrados aún).
 
 \begin{plaincode}
 hugo-pbx*CLI> manager show settings

@@ -20,7 +20,7 @@ The complete system is made up of three physical domains and five logical domain
   \node[sw, right=1.4cm of ata] (asterisk) {Asterisk\\PBX};
   \node[sw, below=of asterisk] (bridge) {hugo-bridge\\(Rust)};
   \node[sw, right=of bridge] (uinput) {Kernel\\/dev/uinput};
-  \node[sw, above=of uinput] (dosbox) {DOSBox-Staging\\+ Hugo};
+  \node[sw, above=of uinput] (dosbox) {DOSBox\\+ Hugo};
 
   \node[hw, right=1.4cm of dosbox] (tv) {HDMI\\television};
 
@@ -50,8 +50,8 @@ Pressing the digit \textbf{2} on the phone travels along the following path:
   \item The \emph{dialplan} fires a \texttt{UserEvent} named \texttt{HugoKey} with the \texttt{Key=2} field, emitted by the \emph{Asterisk Manager Interface} (AMI) over TCP on \texttt{127.0.0.1:5038}.
   \item The \texttt{hugo-bridge} process, subscribed to AMI, parses the event, looks up the configured \emph{keymap} and obtains the target key (\texttt{KEY\_UP}).
   \item Through \texttt{ioctl(2)} on \texttt{/dev/uinput}, the bridge simulates a physical press (press + sync + sleep + release + sync) on a previously created virtual keyboard.
-  \item The kernel propagates the event through \texttt{evdev} to the input subsystem, where it is read by the SDL2 library that DOSBox-Staging uses for input.
-  \item DOSBox-Staging translates the key code into an IBM PC keyboard interrupt 16h, which Hugo reads inside its \emph{event loop}.
+  \item The kernel propagates the event through \texttt{evdev} to the input subsystem, where it is read by the SDL2 library that DOSBox uses for input.
+  \item DOSBox translates the key code into an IBM PC keyboard interrupt 16h, which Hugo reads inside its \emph{event loop}.
   \item Hugo updates the character's position and renders the next frame through emulated VGA, which DOSBox dumps to the HDMI screen.
 \end{enumerate}
 
@@ -81,9 +81,9 @@ Native binary written in Rust, running as a \texttt{systemd} service. Internal c
   \item \textbf{Automatic reconnection}: if the connection to Asterisk drops, the bridge retries with exponential \emph{backoff} up to 30 seconds.
 \end{itemize}
 
-\subsection{DOSBox-Staging}
+\subsection{DOSBox}
 
-DOS emulator optimized for modern hardware. Configured in \emph{fullscreen} mode over KMSDRM (no X server) to minimize resource usage. It launches Hugo automatically from the \texttt{[autoexec]} section of its configuration file.
+Classic DOS emulator (Debian \texttt{dosbox} package) that provides a virtualized x86 CPU, VGA and Sound Blaster 16. It runs inside a minimal X server (\texttt{xinit} + \texttt{openbox}) in \emph{fullscreen} mode. The game ISO is mounted as a CD-ROM drive via \texttt{imgmount} and Hugo launches automatically from the \texttt{[autoexec]} section of the configuration file.
 
 \subsection{System services}
 
@@ -95,7 +95,7 @@ DOS emulator optimized for modern hardware. Configured in \emph{fullscreen} mode
 \midrule
 \texttt{asterisk.service} & \texttt{systemd} & SIP PBX \\
 \texttt{hugo-bridge.service} & \texttt{systemd} (after asterisk) & DTMF $\to$ keyboard \\
-DOSBox-Staging & \texttt{.bashrc} on TTY1 & Runs Hugo \\
+DOSBox & \texttt{.bashrc} on TTY1 & Runs Hugo \\
 Autologin tty1 & \texttt{raspi-config} & Boot without keyboard \\
 \bottomrule
 \end{tabular}

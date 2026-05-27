@@ -4,7 +4,11 @@
 #
 # Hugo (1996) por ITE Media es abandonware. Se distribuye legalmente como tal
 # en sitios como MyAbandonware. Este script descarga, descomprime y deja el
-# juego listo para DOSBox-Staging.
+# juego listo para DOSBox.
+#
+# Hugo 1/2/3 vienen como ZIP con HUGO.EXE suelto (sin instalación).
+# Hugo 4 viene como ISO de CD-ROM y requiere correr INSTALL.EXE adentro de
+# DOSBox la primera vez (ver docs/manual-es/cap06-fase3.tex).
 #
 # Uso: bash scripts/download-hugo.sh
 

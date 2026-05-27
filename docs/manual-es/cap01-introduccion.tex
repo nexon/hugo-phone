@@ -24,7 +24,7 @@ Treinta años después, todos los componentes de aquel sistema están disponible
   \item Ejecutar \textbf{Hugo} (versión DOS, 1996) en una Raspberry Pi 4 (2\,GB) con salida HDMI a un televisor.
   \item Conectar un \textbf{teléfono analógico DTMF} físico al sistema mediante un adaptador FXS (Grandstream HT801).
   \item Implementar una \textbf{centralita telefónica local} en la misma Pi con Asterisk, sin requerir conexión a Internet ni servicios de telefonía externos.
-  \item Desarrollar un \textbf{puente (bridge)} en Rust que traduzca los tonos DTMF capturados por Asterisk a pulsaciones de teclado inyectadas al emulador DOSBox-Staging.
+  \item Desarrollar un \textbf{puente (bridge)} en Rust que traduzca los tonos DTMF capturados por Asterisk a pulsaciones de teclado inyectadas al emulador DOSBox.
   \item Documentar el sistema con un nivel de detalle que permita replicarlo, mantenerlo y extenderlo a un escenario \emph{multijugador} estilo televisión.
 \end{enumerate}
 
@@ -32,7 +32,7 @@ Treinta años después, todos los componentes de aquel sistema están disponible
 
 \subsection{¿Por qué Raspberry Pi 4?}
 
-La Pi 4 es lo suficientemente potente para correr Asterisk, DOSBox-Staging y el bridge simultáneamente, sin dejar de ser un \emph{appliance} compacto, silencioso, de bajo consumo (5--7\,W) y con salida HDMI directa. El modelo de 2\,GB es la opción más económica disponible y deja margen de RAM tras cargar todos los servicios.
+La Pi 4 es lo suficientemente potente para correr Asterisk, DOSBox y el bridge simultáneamente, sin dejar de ser un \emph{appliance} compacto, silencioso, de bajo consumo (5--7\,W) y con salida HDMI directa. El modelo de 2\,GB es la opción más económica disponible y deja margen de RAM tras cargar todos los servicios.
 
 \subsection{¿Por qué Asterisk y no algo más ligero?}
 
@@ -51,9 +51,9 @@ El \emph{bridge} es el componente que recibe los eventos de DTMF desde Asterisk 
 
 Rust cumple las cuatro propiedades sin esfuerzo. El binario final pesa pocos megabytes y consume del orden de 3--5\,MB de RAM en operación.
 
-\subsection{¿Por qué DOSBox-Staging y no DOSBox-X?}
+\subsection{¿Por qué DOSBox clásico?}
 
-DOSBox-Staging es un \emph{fork} moderno con mejoras de rendimiento en plataformas ARM, mantenimiento activo y compatibilidad con la mayoría de juegos DOS. Para Hugo (1996, motor sencillo basado en VGA y Sound Blaster) cualquiera de los \emph{forks} funciona, pero \emph{Staging} es la opción más cuidada actualmente para Raspberry Pi.
+DOSBox (el proyecto original, paquete \texttt{dosbox} en Debian/Raspberry Pi OS) es maduro, está empaquetado en los repos oficiales de Trixie y soporta sin problemas todo lo que Hugo necesita: VGA, Sound Blaster 16, montaje de imágenes ISO con \texttt{imgmount}, y un núcleo \emph{dynamic} con buen rendimiento en ARM. Los \emph{forks} más modernos (DOSBox-Staging, DOSBox-X) aportan shaders OpenGL y KMSDRM más limpio, pero no son estrictamente necesarios para el motor sencillo de Hugo y, al momento de escribir este manual, \texttt{dosbox-staging} no está disponible en los repositorios estándar de la Pi.
 
 \section{Estructura del manual}
 

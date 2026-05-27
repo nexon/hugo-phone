@@ -31,7 +31,7 @@ Fill in:
 \textbf{Field} & \textbf{Value} \\
 \midrule
 Username & 102 \\
-Password & the secret defined for extension 102 in \texttt{sip.conf} \\
+Password & the secret defined for extension 102 in \texttt{pjsip.conf} \\
 Domain & 192.168.1.10 (the Pi's IP) \\
 Transport & UDP \\
 Display Name & Test Hugo \\
@@ -52,13 +52,17 @@ sudo asterisk -rvvv
 Inside the CLI:
 
 \begin{plaincode}
-hugo-pbx*CLI> sip show peers
-Name/username             Host                Status
-101/101                   (Unspecified)       UNKNOWN
-102/102                   192.168.1.20:xxxx   OK (3 ms)
+hugo-pbx*CLI> pjsip show endpoints
+ Endpoint:  <Endpoint/CID.....................................>  <State.....>  <Channels.>
+ Contact:   <AOR/ContactUri............................>  <Hash....> <Status> <RTT(ms)..>
+==========================================================================================
+
+ Endpoint:  101/101                                              Unavailable   0 of inf
+ Endpoint:  102/102                                              Not in use    0 of inf
+        Contact:  102/sip:102@192.168.1.20:xxxx                  abcdef0123   Avail        3.000
 \end{plaincode}
 
-Extension 102 must appear with the IP of the device running Linphone and status \texttt{OK}.
+Extension 102 must show a \emph{Contact} (the IP of the device running Linphone) with status \texttt{Avail}.
 
 \section{Step 4: Test call to 9000}
 
@@ -110,21 +114,21 @@ If the events appear, \textbf{Phase 2 is complete}: the PBX captures DTMF correc
   \item Look at Asterisk logs for failed attempts:
   \begin{shellcode}
 sudo asterisk -rvvv
-hugo-pbx*CLI> sip set debug on
+hugo-pbx*CLI> pjsip set logger on
   \end{shellcode}
 \end{itemize}
 
 \subsection{The 9000 call drops immediately}
 
 \begin{itemize}
-  \item Check that extension 102 is assigned to context \texttt{hugo-game} in \texttt{sip.conf}.
+  \item Check that extension 102 is assigned to context \texttt{hugo-game} in \texttt{pjsip.conf}.
   \item Run \texttt{dialplan show hugo-game} in the CLI and confirm that extension 9000 is present.
 \end{itemize}
 
 \subsection{It connects but the beep is not heard}
 
 \begin{itemize}
-  \item Typical NAT or incompatible-codec problem. Verify that \texttt{allow=ulaw} and \texttt{allow=alaw} are in \texttt{sip.conf} and that Linphone also supports these codecs in its advanced configuration.
+  \item Typical NAT or incompatible-codec problem. Verify that \texttt{allow=ulaw} and \texttt{allow=alaw} are in the \texttt{endpoint-template} of \texttt{pjsip.conf} and that Linphone also supports these codecs in its advanced configuration.
   \item Check the device's volume.
 \end{itemize}
 
@@ -132,7 +136,7 @@ hugo-pbx*CLI> sip set debug on
 
 \begin{itemize}
   \item Linphone may send DTMF as \emph{inband} tones instead of RFC 2833. In \textsf{Settings} $\to$ \textsf{Audio} $\to$ \textsf{DTMF mode}, force the \texttt{RFC 2833} or \texttt{SIP INFO} method.
-  \item Confirm that the \texttt{sip.conf} file has the line \texttt{dtmfmode=rfc2833} for extension 102.
+  \item Confirm that the \texttt{endpoint-template} in \texttt{pjsip.conf} has the line \texttt{dtmf\_mode=rfc4733} (PJSIP equivalent of RFC 2833) for extension 102.
 \end{itemize}
 
 \section{Phase wrap-up}
@@ -146,4 +150,4 @@ At this point the following is validated:
   \item The \texttt{UserEvent} is emitted and visible on AMI.
 \end{itemize}
 
-That is everything the bridge needs from the Asterisk side. The next phase prepares DOSBox-Staging and Hugo so that the bridge has somewhere to inject the keys.
+That is everything the bridge needs from the Asterisk side. The next phase prepares DOSBox and Hugo so that the bridge has somewhere to inject the keys.

@@ -1,4 +1,4 @@
-\chapter{Phase 3: DOSBox-Staging and Hugo}
+\chapter{Phase 3: DOSBox and Hugo}
 
 \section{Goal}
 
@@ -8,85 +8,126 @@ Have Hugo running on the Pi, displayed on the HDMI screen and playable with a US
 
 Hugo is \emph{abandonware}: commercial software whose support by the original publisher ceased decades ago, and whose passive distribution is broadly tolerated though not formally authorized. Sites like \texttt{myabandonware.com} and \texttt{abandonwaregames.net} host downloadable copies. The legal situation varies by jurisdiction, but home and educational use has not been the subject of litigation.
 
-\section{Step 1: Download Hugo}
+\section{Step 1: Get Hugo}
 
-From the Mac, open in a browser:
+The series has several entries and the format varies:
 
-\begin{plaincode}
-https://www.myabandonware.com/game/hugo-eya
-\end{plaincode}
+\begin{itemize}
+  \item \textbf{Hugo 1 / 2 / 3} (1990--1992) come as a ZIP that, once extracted, contains a ready-to-run \texttt{HUGO.EXE}.
+  \item \textbf{Hugo 4 and later} are usually distributed as a CD-ROM ISO image with \texttt{INSTALL.EXE}, \texttt{INSTALLW.EXE} and \texttt{HUGO.EXE}. They require running the installer inside DOSBox the first time.
+\end{itemize}
 
-Download the ZIP file the site provides. Once in \texttt{\~{}/Downloads/}, transfer it to the Pi:
+Once downloaded, transfer the file to the Pi:
 
 \begin{shellcode}
+# From the Mac, ZIP (Hugo 1/2/3):
 scp ~/Downloads/Hugo*.zip beto@hugo-pbx.local:/tmp/
+
+# From the Mac, ISO (Hugo 4 and other CD-ROM releases):
+scp ~/Downloads/hugo4.iso \
+  beto@hugo-pbx.local:/opt/hugo-phone/games/
 \end{shellcode}
 
-On the Pi, unzip into the game's directory:
+\subsection{Case A: ZIP with a loose \texttt{HUGO.EXE}}
 
 \begin{shellcode}
-sudo mkdir -p /opt/hugo-phone/games/hugo
-sudo unzip /tmp/Hugo*.zip -d /opt/hugo-phone/games/hugo
-sudo chown -R beto:beto /opt/hugo-phone/games/hugo
-ls /opt/hugo-phone/games/hugo/
+sudo mkdir -p /opt/hugo-phone/games/HUGO
+sudo unzip /tmp/Hugo*.zip -d /opt/hugo-phone/games/HUGO
+sudo chown -R beto:beto /opt/hugo-phone/games/HUGO
+ls /opt/hugo-phone/games/HUGO/
 \end{shellcode}
 
-You should see \texttt{hugo.exe} (or a similar file). Some distributions ship an \texttt{install.exe} installer that must be run inside DOSBox the first time.
+You should see \texttt{HUGO.EXE} (or a similar file). Skip to Step 4.
 
-\section{Step 2: Verify DOSBox-Staging configuration}
+\subsection{Case B: CD-ROM ISO (Hugo 4)}
 
-The install script copied a \texttt{dosbox-staging.conf} optimized for Hugo onto the Pi. Verify:
+The ISO stays as a file. DOSBox mounts it as drive \texttt{D:} with \texttt{imgmount}. The first time you must run the installer (\texttt{INSTALL.EXE}, not \texttt{INSTALLW.EXE}, which targets Windows) so it copies files to \texttt{C:\textbackslash{}HUGO\textbackslash{}} and configures audio.
+
+\section{Step 2: Install DOSBox}
+
+Classic DOSBox is in the official Raspberry Pi OS / Debian Trixie repos:
 
 \begin{shellcode}
-cat ~/.config/dosbox/dosbox-staging.conf | head -30
+sudo apt update
+sudo apt install -y dosbox xinit openbox xserver-xorg
+which dosbox
 \end{shellcode}
 
-If the game's executable is not exactly \texttt{hugo.exe}, edit the \texttt{[autoexec]} section:
+\begin{note}
+The \texttt{dosbox-staging} package is not available in the standard Pi repositories at the time of writing. If it becomes available later, the options in \texttt{dosbox-hugo.conf} would need to be adapted to \emph{Staging}'s syntax.
+\end{note}
+
+\section{Step 3: Game installer (Case B / ISO only)}
+
+Plug HDMI + a USB keyboard into the Pi and log in on the local TTY (not over SSH). DOSBox needs a display.
+
+Launch the installer with the ISO mounted as \texttt{D:}:
 
 \begin{shellcode}
-nano ~/.config/dosbox/dosbox-staging.conf
+startx /usr/bin/dosbox -- \
+  -c "mount c /opt/hugo-phone/games" \
+  -c "imgmount d /opt/hugo-phone/games/hugo4.iso -t iso" \
+  -c "d:" \
+  -c "INSTALL.EXE"
 \end{shellcode}
 
-The section to tweak is:
+Inside the installer:
+
+\begin{itemize}
+  \item \textbf{Destination}: \texttt{C:\textbackslash{}HUGO} (or whatever it defaults to).
+  \item \textbf{Sound card}: Sound Blaster 16, base \texttt{220}, IRQ \texttt{7}, DMA \texttt{1}. Matches the \texttt{[sblaster]} section of \texttt{dosbox-hugo.conf}.
+  \item Accept and exit the installer.
+\end{itemize}
+
+Verify the files were copied:
+
+\begin{shellcode}
+ls /opt/hugo-phone/games/HUGO/
+\end{shellcode}
+
+\section{Step 4: Verify DOSBox configuration}
+
+The install script copied \texttt{dosbox-hugo.conf} to \texttt{/opt/hugo-phone/games/}. Verify:
+
+\begin{shellcode}
+head -30 /opt/hugo-phone/games/dosbox-hugo.conf
+\end{shellcode}
+
+If the game's executable is not exactly \texttt{HUGO.EXE} or lives in a different subfolder, edit the \texttt{[autoexec]} section:
+
+\begin{shellcode}
+nano /opt/hugo-phone/games/dosbox-hugo.conf
+\end{shellcode}
+
+Default section (Case B, Hugo 4 ISO with CD present):
 
 \begin{plaincode}
 [autoexec]
 mount c /opt/hugo-phone/games
+imgmount d /opt/hugo-phone/games/hugo4.iso -t iso
 c:
-cd hugo
-hugo.exe
+cd HUGO
+HUGO.EXE
 exit
 \end{plaincode}
 
-\section{Step 3: Graphical output modes}
+For Case A (loose HUGO.EXE, no ISO), comment out the \texttt{imgmount} line.
 
-DOSBox-Staging can draw in several ways. In order of increasing simplicity:
+\section{Step 5: Launch Hugo}
 
-\subsection{Development mode: with a lightweight desktop}
-
-For tests and diagnostics, install Openbox (a minimalist window manager):
+DOSBox from the Debian package uses SDL 1.2 and requires an X server (no direct KMSDRM support). The simplest path is \texttt{startx} + DOSBox inside:
 
 \begin{shellcode}
-sudo apt install -y xinit openbox
-echo "exec openbox-session" > ~/.xinitrc
-startx /usr/games/dosbox-staging
+startx /usr/bin/dosbox -conf /opt/hugo-phone/games/dosbox-hugo.conf
 \end{shellcode}
 
-This starts an X11 server with Openbox and launches DOSBox-Staging inside. Useful for experimentation.
-
-\subsection{Appliance mode: direct KMSDRM}
-
-For the final operation, DOSBox-Staging can draw directly to the kernel framebuffer with no X server, which reduces memory usage and removes compositing latency:
-
-\begin{shellcode}
-SDL_VIDEODRIVER=kmsdrm dosbox-staging
-\end{shellcode}
+This starts a minimal X11, runs DOSBox inside, and when DOSBox closes, X terminates and you're back at the TTY.
 
 \begin{note}
-KMSDRM only works from a local TTY (not over SSH X-forwarding). It is the recommended mode for normal appliance operation.
+\texttt{startx} only works from a local TTY (not over SSH). For remote testing you can use SSH with X forwarding (\texttt{ssh -Y}), but performance is much worse and is not recommended for real playability.
 \end{note}
 
-\section{Step 4: Auto-start the game}
+\section{Step 6: Auto-start the game}
 
 Configure the Pi so that powering on takes you directly into Hugo, with no user intervention.
 
@@ -100,17 +141,18 @@ Navigate to: \textsf{System Options} $\to$ \textsf{Boot / Auto Login} $\to$ \tex
 
 \subsection{Run DOSBox at login}
 
-Edit the \texttt{.bashrc} of the \texttt{beto} user:
+Edit the \texttt{.bash\_profile} of the \texttt{beto} user:
 
 \begin{shellcode}
-nano ~/.bashrc
+nano ~/.bash_profile
 \end{shellcode}
 
 Append at the end:
 
 \begin{plaincode}
 if [ -z "$DISPLAY" ] && [ "$(tty)" = "/dev/tty1" ]; then
-  SDL_VIDEODRIVER=kmsdrm dosbox-staging
+  startx /usr/bin/dosbox \
+    -conf /opt/hugo-phone/games/dosbox-hugo.conf
 fi
 \end{plaincode}
 
@@ -121,11 +163,11 @@ After reboot, the sequence should be:
 \begin{enumerate}
   \item Kernel boot
   \item Autologin as \texttt{beto} on \texttt{tty1}
-  \item DOSBox-Staging running in KMSDRM mode
-  \item Hugo auto-launched per \texttt{[autoexec]}
+  \item \texttt{startx} brings up X11
+  \item DOSBox starts, runs \texttt{[autoexec]} and Hugo appears
 \end{enumerate}
 
-\section{Step 5: Playability test}
+\section{Step 7: Playability test}
 
 With a USB keyboard plugged into the Pi and Hugo loaded, test:
 
@@ -135,7 +177,7 @@ With a USB keyboard plugged into the Pi and Hugo loaded, test:
   \item \texttt{Esc} $\to$ menu/exit
 \end{itemize}
 
-If Hugo feels excessively fast or slow, adjust the \texttt{cycles} line in \texttt{dosbox-staging.conf}:
+If Hugo feels excessively fast or slow, adjust the \texttt{cycles} line in \texttt{dosbox-hugo.conf}:
 
 \begin{tomlcode}
 [cpu]
@@ -144,21 +186,31 @@ cycles = fixed 8000   # Increase if too slow, decrease if too fast
 
 The original Hugo required roughly a 386SX at 25\,MHz. Start with \texttt{cycles = fixed 8000} and calibrate.
 
-\section{Step 6: Exit cleanly}
+\section{Step 8: Exit cleanly}
 
 Two \texttt{Esc} presses bring up Hugo's menu. The \emph{Quit} option returns to the DOSBox prompt; the \texttt{exit} command in the \texttt{[autoexec]} block closes DOSBox automatically.
 
-For an emergency exit (for example if the game hangs): \texttt{Ctrl}+\texttt{F9} is the \emph{kill switch} for DOSBox-Staging.
+For an emergency exit (for example if the game hangs): \texttt{Ctrl}+\texttt{F9} is the \emph{kill switch} for DOSBox.
 
 \section{Troubleshooting}
 
+\subsection{\texttt{startx} can't find display or fails}
+
+Confirm the X server packages are present:
+
+\begin{shellcode}
+sudo apt install -y xinit openbox xserver-xorg
+\end{shellcode}
+
+And that you're logged into a local TTY (not SSH). Check with \texttt{tty} (it should answer \texttt{/dev/tty1} or similar, not \texttt{/dev/pts/*}).
+
 \subsection{Hugo hangs on the intro or the cutscenes}
 
-DOSBox-Staging on ARM occasionally has problems decoding VGA animations. Pressing any key to skip the intro usually solves it. If it persists, lower the output resolution:
+DOSBox on ARM occasionally has problems decoding VGA animations. Pressing any key to skip the intro usually solves it. If it persists, lower the \emph{output} quality:
 
 \begin{tomlcode}
 [sdl]
-windowresolution = 640x480
+output = surface
 \end{tomlcode}
 
 \subsection{The audio stutters}
@@ -173,27 +225,26 @@ blocksize = 2048
 
 If stuttering remains, lower the quality: \texttt{rate = 22050}.
 
-\subsection{Black screen at startup}
+\subsection{The game asks for CD but the ISO is mounted}
 
-The KMSDRM driver is probably not available in the installed SDL2 version. Alternatives:
-
-\begin{shellcode}
-SDL_VIDEODRIVER=fbcon dosbox-staging
-\end{shellcode}
-
-Or install the minimal desktop:
+Make sure \texttt{imgmount} didn't fail silently:
 
 \begin{shellcode}
-sudo apt install -y xinit openbox
+ls -la /opt/hugo-phone/games/hugo4.iso
 \end{shellcode}
 
-And launch DOSBox inside \texttt{startx}.
+It must exist and be readable by the \texttt{beto} user. If not, fix permissions:
+
+\begin{shellcode}
+sudo chown beto:beto /opt/hugo-phone/games/hugo4.iso
+\end{shellcode}
 
 \subsection{Hugo starts but doesn't respond to the keyboard}
 
 \begin{itemize}
   \item Verify that \texttt{core = dynamic} is present in the \texttt{[cpu]} section.
-  \item Some titles require \texttt{cputype = 386} instead of \texttt{486\_slow}.
+  \item Some titles require \texttt{cputype = 386} instead of \texttt{auto}.
+  \item Make sure the DOSBox window has focus (with \texttt{autolock = true} the keyboard is captured on click).
 \end{itemize}
 
 \section{Phase wrap-up}

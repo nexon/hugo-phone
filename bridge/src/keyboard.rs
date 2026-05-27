@@ -1,6 +1,6 @@
 //! Teclado virtual vía /dev/uinput.
 //!
-//! Crea un device input que el kernel ve como un teclado físico. DOSBox-Staging
+//! Crea un device input que el kernel ve como un teclado físico. DOSBox
 //! lo recibe vía SDL/evdev como cualquier teclado USB.
 //!
 //! Requiere permisos sobre /dev/uinput (correr como root o con regla udev).

@@ -34,7 +34,7 @@
 \toprule
 \textbf{Archivo} & \textbf{Función} \\
 \midrule
-\texttt{/etc/asterisk/sip.conf} & Define extensiones SIP 101 y 102 \\
+\texttt{/etc/asterisk/pjsip.conf} & Define extensiones SIP 101 y 102 (chan\_pjsip) \\
 \texttt{/etc/asterisk/extensions.conf} & Dialplan: lógica del 9000 \\
 \texttt{/etc/asterisk/manager.conf} & Habilita AMI con usuario \texttt{hugo-bridge} \\
 \texttt{/etc/systemd/system/hugo-bridge.service} & Unit del servicio bridge \\
@@ -42,7 +42,7 @@
 \texttt{/opt/hugo-phone/bridge/hugo-bridge} & Binario compilado del bridge \\
 \texttt{/opt/hugo-phone/bridge/config.toml} & Configuración del bridge (hot-reload) \\
 \texttt{/opt/hugo-phone/games/hugo/} & Archivos del juego \\
-\texttt{\textasciitilde/.config/dosbox/dosbox-staging.conf} & Configuración del emulador \\
+\texttt{/opt/hugo-phone/games/dosbox-hugo.conf} & Configuración del emulador (invocada con \texttt{dosbox -conf}) \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -61,9 +61,9 @@ sudo asterisk -rx "reload"        # recargar configs sin reiniciar
 Comandos dentro del CLI de Asterisk:
 
 \begin{plaincode}
-sip show peers              ; estado de extensiones
-sip show registry           ; clientes registrados
-sip set debug on/off        ; trazas detalladas
+pjsip show endpoints        ; estado de extensiones
+pjsip show contacts         ; clientes registrados (AOR contacts)
+pjsip set logger on/off     ; trazas SIP detalladas
 dialplan show hugo-game     ; ver dialplan cargado
 manager show settings       ; estado de AMI
 manager show users          ; usuarios AMI
@@ -191,7 +191,7 @@ Uniqueid: 1715641234.3
 \begin{description}
   \item[AMI] \emph{Asterisk Manager Interface}. Protocolo TCP de texto plano para controlar Asterisk desde clientes externos.
   \item[ATA] \emph{Analog Telephone Adapter}. Dispositivo que convierte una línea analógica a SIP.
-  \item[DOSBox] Emulador del sistema operativo MS-DOS y del hardware del PC compatible. DOSBox-Staging es un fork modernizado.
+  \item[DOSBox] Emulador del sistema operativo MS-DOS y del hardware del PC compatible (CPU, VGA, Sound Blaster, etc.).
   \item[DTMF] \emph{Dual-Tone Multi-Frequency}. Sistema de señalización por pares de tonos, usado por los teclados telefónicos.
   \item[evdev] Subsistema del kernel Linux que expone dispositivos de entrada a \emph{user space}.
   \item[FXO] \emph{Foreign eXchange Office}. Puerto que se conecta a una central como si fuera un teléfono.
@@ -208,7 +208,7 @@ Uniqueid: 1715641234.3
 
 \begin{itemize}
   \item Documentación oficial de Asterisk: \texttt{wiki.asterisk.org}
-  \item DOSBox-Staging: \texttt{dosbox-staging.github.io}
+  \item DOSBox: \texttt{www.dosbox.com}
   \item Crate \texttt{uinput} de Rust: \texttt{docs.rs/uinput}
   \item Tokio: \texttt{tokio.rs}
   \item Grandstream HT801 manual: \texttt{grandstream.com/products}

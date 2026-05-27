@@ -180,7 +180,7 @@ Lee línea por línea hasta encontrar una línea vacía, momento en el cual cons
 
 \section{El módulo \texttt{keyboard.rs}}
 
-El subsistema \texttt{uinput} del kernel Linux permite a un proceso en \emph{user space} crear dispositivos de entrada virtuales. El kernel los expone como cualquier teclado físico bajo \texttt{/dev/input/eventXX} y aplicaciones como DOSBox-Staging no pueden distinguirlos de hardware real.
+El subsistema \texttt{uinput} del kernel Linux permite a un proceso en \emph{user space} crear dispositivos de entrada virtuales. El kernel los expone como cualquier teclado físico bajo \texttt{/dev/input/eventXX} y aplicaciones como DOSBox no pueden distinguirlos de hardware real.
 
 \subsection{Creación del teclado virtual}
 
@@ -274,7 +274,7 @@ En la lista debe aparecer \texttt{hugo-phone-virtual-keyboard}. Seleccionar su n
 
 \section{El flujo completo con softphone}
 
-Con el bridge corriendo, DOSBox-Staging mostrando Hugo en la TV y Linphone registrado:
+Con el bridge corriendo, DOSBox mostrando Hugo en la TV y Linphone registrado:
 
 \begin{enumerate}
   \item Llamar al \texttt{9000} desde Linphone.
@@ -352,7 +352,7 @@ sudo journalctl -u hugo-bridge -f
 \subsection{Los DTMF llegan al bridge pero Hugo no responde}
 
 \begin{itemize}
-  \item DOSBox-Staging requiere tener el foco de ventana. Si se lanzó vía SSH con X-forwarding, lo pierde.
+  \item DOSBox requiere tener el foco de ventana. Si se lanzó vía SSH con X-forwarding, lo pierde.
   \item Probar la inyección contra otra aplicación: con el bridge corriendo, abrir \texttt{nano} en la TTY de DOSBox y verificar que el cursor se mueva al marcar DTMF.
 \end{itemize}
 
