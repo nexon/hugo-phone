@@ -1,0 +1,90 @@
+\chapter{Introduction}
+
+\section{Motivation}
+
+In the early 1990s, several television channels aired children's programs where viewers controlled an on-screen character \emph{live} through the keypad of their telephone. The most famous was \textbf{Hugo}, a small Norwegian troll created by the Danish company ITE Media, who had to rescue his family (Hugolina and their children) from the evil witch Scylla. The broadcast reached more than forty countries, and in Chile it aired on several free-to-air channels.
+
+The mechanism was simple in appearance and sophisticated in infrastructure: the show's production company set up a paid phone line, children would call in, wait their turn while listening to music and the game's audio, and once their turn came they would control Hugo for about a minute by pressing keypad digits:
+
+\begin{itemize}
+  \item \textbf{2} to jump or go up
+  \item \textbf{4} to move left
+  \item \textbf{6} to move right
+  \item \textbf{8} to crouch or go down
+  \item \textbf{5} for special actions
+\end{itemize}
+
+Each press generated a \emph{DTMF} (\emph{Dual-Tone Multi-Frequency}) tone that the studio's switchboard decoded, translated into a game command, and sent to the PC running the interactive version of Hugo. The latency ---comparable to that of a football match streamed today--- was part of the charm and the challenge.
+
+Thirty years later, every component of that system is available as free software or low-cost hardware, which makes it possible to reconstruct the full experience at home, offline, and at a fraction of the original cost. This manual documents step by step how to do it.
+
+\section{Project goals}
+
+\begin{enumerate}
+  \item Run \textbf{Hugo} (DOS version, 1996) on a Raspberry Pi 4 (2\,GB) with HDMI output to a television.
+  \item Connect a physical \textbf{analog DTMF telephone} to the system through an FXS adapter (Grandstream HT801).
+  \item Implement a \textbf{local telephone exchange} on the same Pi using Asterisk, without requiring Internet access or external telephony services.
+  \item Develop a \textbf{bridge} in Rust that translates the DTMF tones captured by Asterisk into keystrokes injected into the DOSBox-Staging emulator.
+  \item Document the system in enough detail that it can be replicated, maintained, and extended to a \emph{multi-player} TV-style scenario.
+\end{enumerate}
+
+\section{Design decisions}
+
+\subsection{Why Raspberry Pi 4?}
+
+The Pi 4 is powerful enough to run Asterisk, DOSBox-Staging and the bridge at the same time, while remaining a compact, silent, low-power (5--7\,W) \emph{appliance} with direct HDMI output. The 2\,GB model is the cheapest option available and still leaves RAM headroom after all services are loaded.
+
+\subsection{Why Asterisk and not something lighter?}
+
+Asterisk is the most widely used and best documented PBX implementation in the free software ecosystem. It ships with native DTMF decoding (RFC\,2833 and \emph{inband}), an extensible \emph{dialplan}, the \emph{Manager Interface} (AMI) for integration with external software, and \emph{ConfBridge} support for \emph{multiparty} conferences. Alternatives like \texttt{baresip} or \texttt{kamailio} are lighter, but they don't include the high-level DTMF decoding or the \emph{dialplan} needed here.
+
+\subsection{Why Rust for the bridge?}
+
+The \emph{bridge} is the component that receives the DTMF events from Asterisk and translates them into virtual keystrokes through the Linux kernel's \texttt{uinput} subsystem. The desirable properties are:
+
+\begin{itemize}
+  \item \textbf{Minimal and predictable latency}: the user perceives any delay between pressing the phone keypad and seeing the character move.
+  \item \textbf{Low RAM consumption}: the 2\,GB Pi has little headroom once DOSBox is loaded.
+  \item \textbf{Stability}: the service must run indefinitely without restarts.
+  \item \textbf{No runtime dependencies}: ideally a single binary, with no virtual environments or interpreters.
+\end{itemize}
+
+Rust meets all four properties effortlessly. The final binary weighs a few megabytes and consumes around 3--5\,MB of RAM at runtime.
+
+\subsection{Why DOSBox-Staging and not DOSBox-X?}
+
+DOSBox-Staging is a modern \emph{fork} with performance improvements on ARM platforms, active maintenance, and compatibility with most DOS games. For Hugo (1996, a simple engine based on VGA and Sound Blaster) any of the \emph{forks} would work, but \emph{Staging} is currently the best-maintained option for Raspberry Pi.
+
+\section{Structure of the manual}
+
+The document is organized in three blocks:
+
+\begin{description}
+  \item[Conceptual block (chapters 1--3):] introduction, overall system architecture, and detailed list of materials (\emph{Bill of Materials}).
+  \item[Implementation block (chapters 4--8):] six sequential phases, each with a clear goal, verifiable steps and \emph{troubleshooting}. Each phase builds on the previous one.
+  \item[Reference block (chapters 9--10):] forward-looking view of multi-player mode and complete technical reference (AMI protocols, DTMF mapping, useful commands).
+\end{description}
+
+\begin{note}
+The phases are designed for incremental validation. If a phase fails, you should not move on to the next one: the system only becomes harder to debug as components stack up on a base that doesn't yet work.
+\end{note}
+
+\section{Typographic conventions}
+
+\begin{itemize}
+  \item \texttt{Shell commands} and file names are shown in monospaced font.
+  \item \emph{Technical terms} introduced for the first time appear in italics.
+  \item Callout boxes follow this scheme:
+\end{itemize}
+
+\begin{note}
+\emph{Note} boxes provide useful but non-critical additional context.
+\end{note}
+
+\begin{warning}
+\emph{Warning} boxes flag situations where a mistake can break the system or require a reinstall.
+\end{warning}
+
+\begin{tip}
+\emph{Tip} boxes contain shortcuts, tricks, or lessons learned from common mistakes.
+\end{tip}

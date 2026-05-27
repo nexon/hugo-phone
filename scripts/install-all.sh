@@ -29,15 +29,21 @@ echo "==> Actualizando apt..."
 apt update
 apt upgrade -y
 
-echo "==> Instalando paquetes base..."
+#echo "==> Instalando paquetes base..."
+#apt install -y \
+#  asterisk asterisk-modules \
+#  dosbox-staging \
+#  build-essential pkg-config \
+#  libudev-dev \
+#  xserver-xorg xinit openbox \
+#  alsa-utils \
+#  git curl unzip
+
+echo "==> Instalando paquetes de dosbox.."
 apt install -y \
-  asterisk asterisk-modules \
-  dosbox-staging \
-  build-essential pkg-config \
-  libudev-dev \
-  xserver-xorg xinit openbox \
-  alsa-utils \
-  git curl unzip
+   dosbox-staging \
+   xserver-xorg xinit openbox \
+   alsa-utils
 
 # ------------------------------------------------------------------
 # 2. Asterisk configs

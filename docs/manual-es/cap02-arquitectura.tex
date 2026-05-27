@@ -5,23 +5,24 @@
 El sistema completo se compone de tres dominios físicos y cinco dominios lógicos coexistiendo dentro de una sola Raspberry Pi:
 
 \begin{center}
+\resizebox{\textwidth}{!}{%
 \begin{tikzpicture}[
-  node distance=0.7cm,
+  node distance=0.6cm,
   every node/.style={font=\small},
-  hw/.style={draw=hugoblue, thick, rounded corners=3pt, fill=hugoblue!10, minimum width=3.2cm, minimum height=1cm, align=center},
-  sw/.style={draw=hugogreen, thick, rounded corners=3pt, fill=hugogreen!10, minimum width=3.2cm, minimum height=0.9cm, align=center},
-  layer/.style={draw=gray!50, dashed, rounded corners=5pt, inner sep=12pt}
+  hw/.style={draw=hugoblue, thick, rounded corners=3pt, fill=hugoblue!10, minimum width=2.6cm, minimum height=1cm, align=center},
+  sw/.style={draw=hugogreen, thick, rounded corners=3pt, fill=hugogreen!10, minimum width=2.6cm, minimum height=0.9cm, align=center},
+  layer/.style={draw=gray!50, dashed, rounded corners=5pt, inner sep=10pt}
 ]
 
   \node[hw] (phone) at (0,0) {Teléfono\\analógico DTMF};
   \node[hw, right=of phone] (ata) {Grandstream\\HT801};
 
-  \node[sw, right=2cm of ata] (asterisk) {Asterisk\\PBX};
+  \node[sw, right=1.4cm of ata] (asterisk) {Asterisk\\PBX};
   \node[sw, below=of asterisk] (bridge) {hugo-bridge\\(Rust)};
   \node[sw, right=of bridge] (uinput) {Kernel\\/dev/uinput};
   \node[sw, above=of uinput] (dosbox) {DOSBox-Staging\\+ Hugo};
 
-  \node[hw, right=of dosbox] (tv) {Televisor\\HDMI};
+  \node[hw, right=1.4cm of dosbox] (tv) {Televisor\\HDMI};
 
   \begin{scope}[on background layer]
     \node[layer, fit=(asterisk)(bridge)(uinput)(dosbox), label={[anchor=south,yshift=2pt]north:\textbf{Raspberry Pi 4 (2\,GB)}}] {};
@@ -34,7 +35,8 @@ El sistema completo se compone de tres dominios físicos y cinco dominios lógic
   \draw[->, thick, hugoaccent] (uinput) -- node[right,font=\tiny] {evdev} (dosbox);
   \draw[->, thick, hugoaccent] (dosbox) -- node[above,font=\tiny] {HDMI} (tv);
 
-\end{tikzpicture}
+\end{tikzpicture}%
+}
 \end{center}
 
 \section{Flujo de datos}

@@ -1,0 +1,201 @@
+\chapter{Phase 3: DOSBox-Staging and Hugo}
+
+\section{Goal}
+
+Have Hugo running on the Pi, displayed on the HDMI screen and playable with a USB keyboard. This is the last individual piece before tying everything together in Phase 4.
+
+\section{Legal status of the game}
+
+Hugo is \emph{abandonware}: commercial software whose support by the original publisher ceased decades ago, and whose passive distribution is broadly tolerated though not formally authorized. Sites like \texttt{myabandonware.com} and \texttt{abandonwaregames.net} host downloadable copies. The legal situation varies by jurisdiction, but home and educational use has not been the subject of litigation.
+
+\section{Step 1: Download Hugo}
+
+From the Mac, open in a browser:
+
+\begin{plaincode}
+https://www.myabandonware.com/game/hugo-eya
+\end{plaincode}
+
+Download the ZIP file the site provides. Once in \texttt{\~{}/Downloads/}, transfer it to the Pi:
+
+\begin{shellcode}
+scp ~/Downloads/Hugo*.zip beto@hugo-pbx.local:/tmp/
+\end{shellcode}
+
+On the Pi, unzip into the game's directory:
+
+\begin{shellcode}
+sudo mkdir -p /opt/hugo-phone/games/hugo
+sudo unzip /tmp/Hugo*.zip -d /opt/hugo-phone/games/hugo
+sudo chown -R beto:beto /opt/hugo-phone/games/hugo
+ls /opt/hugo-phone/games/hugo/
+\end{shellcode}
+
+You should see \texttt{hugo.exe} (or a similar file). Some distributions ship an \texttt{install.exe} installer that must be run inside DOSBox the first time.
+
+\section{Step 2: Verify DOSBox-Staging configuration}
+
+The install script copied a \texttt{dosbox-staging.conf} optimized for Hugo onto the Pi. Verify:
+
+\begin{shellcode}
+cat ~/.config/dosbox/dosbox-staging.conf | head -30
+\end{shellcode}
+
+If the game's executable is not exactly \texttt{hugo.exe}, edit the \texttt{[autoexec]} section:
+
+\begin{shellcode}
+nano ~/.config/dosbox/dosbox-staging.conf
+\end{shellcode}
+
+The section to tweak is:
+
+\begin{plaincode}
+[autoexec]
+mount c /opt/hugo-phone/games
+c:
+cd hugo
+hugo.exe
+exit
+\end{plaincode}
+
+\section{Step 3: Graphical output modes}
+
+DOSBox-Staging can draw in several ways. In order of increasing simplicity:
+
+\subsection{Development mode: with a lightweight desktop}
+
+For tests and diagnostics, install Openbox (a minimalist window manager):
+
+\begin{shellcode}
+sudo apt install -y xinit openbox
+echo "exec openbox-session" > ~/.xinitrc
+startx /usr/games/dosbox-staging
+\end{shellcode}
+
+This starts an X11 server with Openbox and launches DOSBox-Staging inside. Useful for experimentation.
+
+\subsection{Appliance mode: direct KMSDRM}
+
+For the final operation, DOSBox-Staging can draw directly to the kernel framebuffer with no X server, which reduces memory usage and removes compositing latency:
+
+\begin{shellcode}
+SDL_VIDEODRIVER=kmsdrm dosbox-staging
+\end{shellcode}
+
+\begin{note}
+KMSDRM only works from a local TTY (not over SSH X-forwarding). It is the recommended mode for normal appliance operation.
+\end{note}
+
+\section{Step 4: Auto-start the game}
+
+Configure the Pi so that powering on takes you directly into Hugo, with no user intervention.
+
+\subsection{Enable autologin on TTY1}
+
+\begin{shellcode}
+sudo raspi-config
+\end{shellcode}
+
+Navigate to: \textsf{System Options} $\to$ \textsf{Boot / Auto Login} $\to$ \textsf{Console Autologin}. Save and exit.
+
+\subsection{Run DOSBox at login}
+
+Edit the \texttt{.bashrc} of the \texttt{beto} user:
+
+\begin{shellcode}
+nano ~/.bashrc
+\end{shellcode}
+
+Append at the end:
+
+\begin{plaincode}
+if [ -z "$DISPLAY" ] && [ "$(tty)" = "/dev/tty1" ]; then
+  SDL_VIDEODRIVER=kmsdrm dosbox-staging
+fi
+\end{plaincode}
+
+The condition prevents DOSBox from running if you log in over SSH or from a TTY other than 1.
+
+After reboot, the sequence should be:
+
+\begin{enumerate}
+  \item Kernel boot
+  \item Autologin as \texttt{beto} on \texttt{tty1}
+  \item DOSBox-Staging running in KMSDRM mode
+  \item Hugo auto-launched per \texttt{[autoexec]}
+\end{enumerate}
+
+\section{Step 5: Playability test}
+
+With a USB keyboard plugged into the Pi and Hugo loaded, test:
+
+\begin{itemize}
+  \item Arrow keys $\to$ character movement
+  \item Space bar $\to$ action
+  \item \texttt{Esc} $\to$ menu/exit
+\end{itemize}
+
+If Hugo feels excessively fast or slow, adjust the \texttt{cycles} line in \texttt{dosbox-staging.conf}:
+
+\begin{tomlcode}
+[cpu]
+cycles = fixed 8000   # Increase if too slow, decrease if too fast
+\end{tomlcode}
+
+The original Hugo required roughly a 386SX at 25\,MHz. Start with \texttt{cycles = fixed 8000} and calibrate.
+
+\section{Step 6: Exit cleanly}
+
+Two \texttt{Esc} presses bring up Hugo's menu. The \emph{Quit} option returns to the DOSBox prompt; the \texttt{exit} command in the \texttt{[autoexec]} block closes DOSBox automatically.
+
+For an emergency exit (for example if the game hangs): \texttt{Ctrl}+\texttt{F9} is the \emph{kill switch} for DOSBox-Staging.
+
+\section{Troubleshooting}
+
+\subsection{Hugo hangs on the intro or the cutscenes}
+
+DOSBox-Staging on ARM occasionally has problems decoding VGA animations. Pressing any key to skip the intro usually solves it. If it persists, lower the output resolution:
+
+\begin{tomlcode}
+[sdl]
+windowresolution = 640x480
+\end{tomlcode}
+
+\subsection{The audio stutters}
+
+Increase the mixer buffer:
+
+\begin{tomlcode}
+[mixer]
+prebuffer = 50
+blocksize = 2048
+\end{tomlcode}
+
+If stuttering remains, lower the quality: \texttt{rate = 22050}.
+
+\subsection{Black screen at startup}
+
+The KMSDRM driver is probably not available in the installed SDL2 version. Alternatives:
+
+\begin{shellcode}
+SDL_VIDEODRIVER=fbcon dosbox-staging
+\end{shellcode}
+
+Or install the minimal desktop:
+
+\begin{shellcode}
+sudo apt install -y xinit openbox
+\end{shellcode}
+
+And launch DOSBox inside \texttt{startx}.
+
+\subsection{Hugo starts but doesn't respond to the keyboard}
+
+\begin{itemize}
+  \item Verify that \texttt{core = dynamic} is present in the \texttt{[cpu]} section.
+  \item Some titles require \texttt{cputype = 386} instead of \texttt{486\_slow}.
+\end{itemize}
+
+\section{Phase wrap-up}
+
+At this point the game runs with a USB keyboard. The next phase replaces that USB keyboard with a virtual one controlled from the phone.

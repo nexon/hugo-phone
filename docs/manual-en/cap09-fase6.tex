@@ -1,0 +1,176 @@
+\chapter{Phase 6: Multi-player mode (future)}
+
+\section{Vision}
+
+The configuration described up to the previous chapter supports a single phone. The original television experience, however, contemplated multiple players calling at the same time, listening to the game's audio while waiting, and receiving rotating 30-to-60-second turns.
+
+This phase describes the design needed to scale the system to that full experience. \textbf{It is not documented as a step-by-step executable guide} (that is work for a 2.0 version of the project), but as an architectural roadmap.
+
+\section{Hardware changes}
+
+\begin{itemize}
+  \item Replace the \textbf{HT801} (1 FXS port) with:
+    \begin{itemize}
+      \item \textbf{HT802}: 2 FXS ports. Approx. cost \$55,000 CLP.
+      \item \textbf{HT814}: 4 FXS ports. Approx. cost \$110,000 CLP.
+      \item \textbf{Cisco SPA8000} (used): 8 FXS ports. Approx. cost \$80,000--120,000 CLP.
+    \end{itemize}
+  \item Acquire as many additional analog phones as FXS ports you'll use.
+  \item Optionally, a USB HDMI capture card to stream or record matches.
+\end{itemize}
+
+\section{Asterisk changes}
+
+\subsection{sip.conf: new extensions}
+
+Add extensions 102, 103, 104 according to the number of FXS ports, following the same pattern as the already documented 101.
+
+\subsection{confbridge.conf: conference rooms}
+
+Create the file \texttt{/etc/asterisk/confbridge.conf} with profiles for two kinds of participants:
+
+\begin{astcode}
+[default_bridge]
+type=bridge
+max_members=10
+mixing_interval=20
+
+[player_active]
+type=user
+admin=no
+marked=yes
+quiet=yes
+
+[player_waiting]
+type=user
+admin=no
+marked=no
+quiet=yes
+music_on_hold_when_empty=no
+\end{astcode}
+
+\subsection{extensions.conf: queue logic}
+
+Modify extension \texttt{9000} so that the first participant enters as \emph{player\_active} and subsequent ones as \emph{player\_waiting}:
+
+\begin{astcode}
+[hugo-game]
+exten => 9000,1,Answer()
+ same => n,Set(POSITION=${CONFBRIDGE_INFO(parties,hugo-room)})
+ same => n,GotoIf($[${POSITION} = 0]?active:waiting)
+ same => n(active),ConfBridge(hugo-room,default_bridge,player_active)
+ same => n(waiting),Playback(esperando-turno)
+ same => n,ConfBridge(hugo-room,default_bridge,player_waiting)
+\end{astcode}
+
+\section{Turn logic}
+
+An additional component is needed (it could be another Rust process or a module inside the existing bridge) that every 60 seconds:
+
+\begin{enumerate}
+  \item Identifies the current \emph{player\_active} via the \texttt{ConfbridgeList} event or \texttt{ConfbridgeList} queries over AMI.
+  \item Demotes them to \emph{waiting} via \texttt{ConfbridgeMute} and a profile reconfiguration.
+  \item Promotes the next player in queue (FIFO) to \emph{active}.
+  \item Announces the turn change by playing a pre-recorded message to everyone.
+\end{enumerate}
+
+Only the active player should be able to control the character. This is achieved by having the bridge filter \texttt{UserEvent} messages by the \texttt{Channel} field and only accept those from the active channel.
+
+\section{Game audio in the conference}
+
+For waiting players to hear Hugo, the audio from DOSBox-Staging must be routed into the conference room.
+
+\subsection{Path A: ALSA loopback}
+
+\begin{shellcode}
+sudo modprobe snd-aloop
+\end{shellcode}
+
+This creates a virtual device \texttt{hw:Loopback,0}. DOSBox-Staging is configured to output audio to that device. Asterisk opens the other end of the loopback as an input channel and \emph{bridges} it into the room.
+
+\subsection{Path B: PipeWire}
+
+More flexible and modern but with higher resource usage. On the Pi 4 (2\,GB) it could be a bottleneck; on Pi 5 it works without trouble.
+
+\section{Physical topology}
+
+\begin{center}
+\begin{tikzpicture}[
+  every node/.style={font=\small},
+  box/.style={draw=hugoblue, thick, rounded corners=3pt, fill=hugoblue!10, align=center}
+]
+  \node[box, minimum width=2cm, minimum height=1cm] (tv) at (0,2.5) {Television};
+  \node[box, minimum width=3cm, minimum height=1.2cm] (pi) at (0,0) {Raspberry Pi 4};
+  \node[box, minimum width=3cm, minimum height=1.2cm] (ata) at (0,-2.5) {HT814 (4 FXS)};
+
+  \draw[->, thick, hugoaccent] (pi) -- node[right,font=\tiny] {HDMI} (tv);
+  \draw[<->, thick, hugoaccent] (pi) -- node[right,font=\tiny] {Ethernet} (ata);
+
+  \node[box, minimum width=1.5cm, minimum height=0.8cm] (p1) at (-4.5,-2.5) {Phone 1};
+  \node[box, minimum width=1.5cm, minimum height=0.8cm] (p2) at (-2.5,-4.5) {Phone 2};
+  \node[box, minimum width=1.5cm, minimum height=0.8cm] (p3) at (2.5,-4.5) {Phone 3};
+  \node[box, minimum width=1.5cm, minimum height=0.8cm] (p4) at (4.5,-2.5) {Phone 4};
+
+  \draw[-, hugoaccent] (p1) -- (ata);
+  \draw[-, hugoaccent] (p2) -- (ata);
+  \draw[-, hugoaccent] (p3) -- (ata);
+  \draw[-, hugoaccent] (p4) -- (ata);
+\end{tikzpicture}
+\end{center}
+
+\section{Optional features}
+
+\subsection{Player identification}
+
+At the start of every call, before entering the room, the player can be asked to dial a digit to identify themselves:
+
+\begin{plaincode}
+"Welcome to Hugo. Press 1 if you are new, or your player number
+if you already have one."
+\end{plaincode}
+
+This makes it possible to keep a persistent ranking across sessions.
+
+\subsection{Scoreboard / ranking}
+
+A local SQLite database on the Pi can store scores per player. Each time Hugo registers a life lost or a level completed (information that could be captured via OCR on the HDMI output or by reading the DOSBox process memory), the scoreboard is updated.
+
+\subsection{On-screen scoreboard display}
+
+An overlay can be drawn on top of the HDMI output via:
+
+\begin{itemize}
+  \item OBS Studio in composition mode.
+  \item A second process drawing with SDL2 on a transparent layer.
+  \item A small secondary LCD screen dedicated to the scoreboard.
+\end{itemize}
+
+\subsection{Streaming to Twitch or YouTube}
+
+With a USB HDMI capture card plugged into the Mac (not the Pi, to avoid overloading it), matches can be broadcast. This lets other friends watch the game without being physically present.
+
+\section{Effort estimate}
+
+\begin{table}[h]
+\centering
+\begin{tabular}{lc}
+\toprule
+\textbf{Component} & \textbf{Approx. effort} \\
+\midrule
+ConfBridge and new SIP extensions & 4 hours \\
+Turn logic (Rust) & 16 hours \\
+ALSA audio loopback & 4 hours \\
+Player identification & 4 hours \\
+SQLite persistence & 4 hours \\
+Scoreboard overlay & 12 hours \\
+Tests and calibration & 8 hours \\
+\midrule
+\textbf{Estimated total} & \textbf{$\sim$52 hours} \\
+\bottomrule
+\end{tabular}
+\caption{Time estimate for implementing multi-player mode.}
+\end{table}
+
+\section{Wrap-up}
+
+The base system designed in chapters 4--8 is intended to grow into this multi-player version without rewriting components. When the time comes to implement it, a new detailed design phase should be opened taking these foundations as a reference.

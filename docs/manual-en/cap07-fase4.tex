@@ -1,0 +1,371 @@
+\chapter{Phase 4: The Rust bridge}
+
+\section{Goal}
+
+Bring up the \texttt{hugo-bridge} bridge, which wires Asterisk's AMI events into the kernel's \texttt{uinput} subsystem, translating DTMF into virtual keystrokes.
+
+This is the most software-heavy phase of the project. It is also used to document the bridge's internal architecture in detail.
+
+\section{Code structure}
+
+\begin{plaincode}
+bridge/
+|-- Cargo.toml                 # Crate manifest
+|-- config.toml                # Runtime configuration
+|-- hugo-bridge.service        # systemd unit
+`-- src/
+    |-- main.rs                # Entry point, tokio runtime
+    |-- config.rs              # TOML parsing with serde
+    |-- ami.rs                 # Minimal AMI client
+    |-- keyboard.rs            # uinput virtual keyboard
+    `-- watcher.rs             # File watcher (hot-reload)
+\end{plaincode}
+
+\section{Dependencies and design philosophy}
+
+The bridge was designed to minimize external dependencies. The only \emph{crates} in \texttt{Cargo.toml} are:
+
+\begin{itemize}
+  \item \texttt{tokio}: async runtime (with specific \emph{features}, not \texttt{full}).
+  \item \texttt{serde + toml}: configuration-file parsing.
+  \item \texttt{tracing + tracing-subscriber}: structured logging.
+  \item \texttt{clap}: command-line argument parsing.
+  \item \texttt{uinput}: \emph{wrapper} over the \texttt{ioctl} API of \texttt{/dev/uinput}.
+  \item \texttt{notify}: file watcher for hot-reload.
+\end{itemize}
+
+Conspicuously absent: any existing AMI client. The protocol is simple enough to implement by hand in about 150 lines, avoiding extra dependencies and keeping control over every byte that crosses the socket.
+
+\section{The AMI protocol}
+
+\emph{Asterisk Manager Interface} is a plain-text protocol over TCP. Its informal specification is:
+
+\begin{itemize}
+  \item TCP connection to \texttt{127.0.0.1:5038}.
+  \item The server sends a banner: \texttt{Asterisk Call Manager/X.Y.Z\textbackslash r\textbackslash n}.
+  \item Messages (in both directions) consist of \texttt{Key: Value} pairs separated by \texttt{\textbackslash r\textbackslash n}, terminated by a blank line (\texttt{\textbackslash r\textbackslash n\textbackslash r\textbackslash n}).
+  \item The client must authenticate with an \texttt{Action: Login} message including \texttt{Username} and \texttt{Secret} fields.
+  \item After that, the server sends asynchronous events whenever they occur.
+\end{itemize}
+
+A real-world message example:
+
+\begin{plaincode}
+Event: UserEvent
+Privilege: user,all
+UserEvent: HugoKey
+Channel: PJSIP/102-00000001
+Caller: 102
+Key: 2
+Uniqueid: 1715641234.1
+(blank line)
+\end{plaincode}
+
+\section{Anatomy of the \texttt{ami.rs} module}
+
+The AMI client is implemented in four functions:
+
+\subsection{\texttt{run}: main loop with reconnection}
+
+\begin{rustcode}
+pub async fn run(mut cfg_rx: watch::Receiver<Arc<Config>>) -> Result<()> {
+    let initial_cfg = cfg_rx.borrow().clone();
+    let mut keyboard = VirtualKeyboard::new(
+        &initial_cfg.keymap,
+        initial_cfg.bridge.press_duration_ms,
+    )?;
+
+    let mut backoff_secs = 1u64;
+    loop {
+        let cfg = cfg_rx.borrow().clone();
+        match connect_and_loop(&cfg, &mut keyboard, &mut cfg_rx).await {
+            Ok(()) => {
+                backoff_secs = 1;
+            }
+            Err(e) => {
+                error!("AMI error: {}. Retrying in {}s...", e, backoff_secs);
+                sleep(Duration::from_secs(backoff_secs)).await;
+                backoff_secs = (backoff_secs * 2).min(30);
+            }
+        }
+    }
+}
+\end{rustcode}
+
+Three key decisions:
+
+\begin{itemize}
+  \item \textbf{The keyboard is created only once}, outside the connection loop. Recreating it between reconnections causes a brief window where the \texttt{/dev/input/eventXX} device disappears, which SDL2 handles poorly.
+  \item \textbf{Exponential backoff} between retries (1, 2, 4, 8, 16, 30, 30, \ldots), capped at 30 seconds so we don't wait minutes when Asterisk restarts.
+  \item \textbf{The config \emph{receiver} is passed by mutable reference} so the inner function can detect configuration changes while connected.
+\end{itemize}
+
+\subsection{\texttt{connect\_and\_loop}: connection, login and event loop}
+
+After connecting the TCP socket, reading the banner and sending \texttt{Action: Login}, the main loop uses \texttt{tokio::select!} to multiplex two event sources:
+
+\begin{rustcode}
+loop {
+    tokio::select! {
+        msg = read_message(&mut reader) => {
+            let msg = msg?;
+            handle_event(&msg, &event_name, &key_field, keyboard).await;
+        }
+        changed = cfg_rx.changed() => {
+            if changed.is_err() { return Ok(()); }
+            let new_cfg = cfg_rx.borrow().clone();
+            keyboard.update_keymap(&new_cfg.keymap);
+            keyboard.set_press_duration(new_cfg.bridge.press_duration_ms);
+            if new_cfg.ami != cfg.ami {
+                return Ok(()); // forces reconnection
+            }
+        }
+    }
+}
+\end{rustcode}
+
+The \texttt{select!} blocks until one of two things happens. If a message arrives, it is processed. If the configuration changed (hot-reloaded by the watcher), it is applied to the keyboard, and if the AMI parameters changed, a reconnection is forced by returning \texttt{Ok(())} to the outer loop.
+
+\subsection{\texttt{handle\_event}: filtering and action}
+
+\begin{rustcode}
+async fn handle_event(
+    msg: &HashMap<String, String>,
+    event_name: &str,
+    key_field: &str,
+    keyboard: &mut VirtualKeyboard,
+) {
+    if msg.get("Event").map(String::as_str) != Some("UserEvent") { return; }
+    if msg.get("UserEvent").map(String::as_str) != Some(event_name) { return; }
+
+    let Some(dtmf) = msg.get(key_field) else { return };
+    let caller = msg.get("Caller").map(String::as_str).unwrap_or("?");
+
+    info!("DTMF {} from {}", dtmf, caller);
+    if let Err(e) = keyboard.press_dtmf(dtmf).await {
+        error!("Failed to press key: {}", e);
+    }
+}
+\end{rustcode}
+
+Three successive filters discard AMI events the bridge doesn't care about. Only \texttt{UserEvent}s of type \texttt{HugoKey} (configurable) reach the key-injection path.
+
+\subsection{\texttt{read\_message}: wire-format parser}
+
+\begin{rustcode}
+async fn read_message<R: tokio::io::AsyncBufRead + Unpin>(
+    reader: &mut R,
+) -> std::result::Result<HashMap<String, String>, BoxError> {
+    let mut map = HashMap::new();
+    let mut line = String::new();
+    loop {
+        line.clear();
+        let n = reader.read_line(&mut line).await?;
+        if n == 0 {
+            return Err("AMI connection closed by server".into());
+        }
+        let trimmed = line.trim_end_matches(['\r', '\n']);
+        if trimmed.is_empty() {
+            if map.is_empty() { continue; }
+            return Ok(map);
+        }
+        if let Some((k, v)) = trimmed.split_once(':') {
+            map.insert(k.trim().to_string(), v.trim().to_string());
+        }
+    }
+}
+\end{rustcode}
+
+Reads line by line until it finds a blank line, at which point it considers the message complete. Malformed lines (without a \texttt{:}) are silently discarded, typical behavior of tolerant parsers in legacy protocols.
+
+\section{The \texttt{keyboard.rs} module}
+
+The Linux kernel's \texttt{uinput} subsystem lets a \emph{user space} process create virtual input devices. The kernel exposes them just like any physical keyboard under \texttt{/dev/input/eventXX} and applications like DOSBox-Staging cannot tell them apart from real hardware.
+
+\subsection{Creating the virtual keyboard}
+
+\begin{rustcode}
+let device = uinput::default()?
+    .name("hugo-phone-virtual-keyboard")?
+    .event(uinput::event::Keyboard::All)?
+    .create()?;
+\end{rustcode}
+
+The constant \texttt{Keyboard::All} registers every key the kernel knows about. This matters for hot-reload: if we only registered the keys present in the initial \emph{keymap}, switching the mapping to a new key would require destroying and recreating the device, which interrupts the flow.
+
+\subsection{Injecting a press}
+
+\begin{rustcode}
+pub async fn press_dtmf(&mut self, dtmf: &str) -> Result<()> {
+    let Some(key) = self.keymap.get(dtmf) else {
+        warn!("DTMF {:?} unmapped", dtmf);
+        return Ok(());
+    };
+    self.device.press(key)?;
+    self.device.synchronize()?;
+    sleep(self.press_duration).await;
+    self.device.release(key)?;
+    self.device.synchronize()?;
+    Ok(())
+}
+\end{rustcode}
+
+Each press follows the cycle:
+
+\begin{enumerate}
+  \item Look up the symbolic key matching the received DTMF.
+  \item Send a \texttt{press} event.
+  \item Call \texttt{synchronize()} so the kernel emits a \texttt{SYN\_REPORT} and propagates the event to consumers.
+  \item Wait \texttt{press\_duration} (typically 80\,ms).
+  \item Send a \texttt{release} event and sync again.
+\end{enumerate}
+
+The pause between \emph{press} and \emph{release} is important: too short and games like Hugo don't detect the press; too long and the game's engine triggers the action in continuous repetition.
+
+\section{The \texttt{watcher.rs} module}
+
+The configuration \emph{hot-reload} lets you tweak the \emph{keymap} and the press duration without restarting the service. It is particularly useful during initial calibration.
+
+\begin{rustcode}
+let mut watcher = notify::recommended_watcher(move |res: notify::Result<Event>| {
+    match res {
+        Ok(evt) => { let _ = tx.send(evt); }
+        Err(e) => error!("Watcher error: {}", e),
+    }
+})?;
+watcher.watch(parent, RecursiveMode::NonRecursive)?;
+\end{rustcode}
+
+Two important details:
+
+\begin{itemize}
+  \item We watch the \textbf{parent directory}, not the file itself. Many editors save a file by writing to a temporary and renaming it on top of the original (\emph{atomic save}), which doesn't fire a \emph{modify} event on the original file but a \emph{create} in the directory.
+  \item A 500\,ms \emph{debounce} is applied to avoid multiple reloads if the editor writes in several steps.
+\end{itemize}
+
+\section{Practical verification}
+
+Test the bridge manually:
+
+\begin{shellcode}
+cd /opt/hugo-phone/bridge
+sudo ./hugo-bridge --config config.toml
+\end{shellcode}
+
+Expected output:
+
+\begin{plaincode}
+INFO Config loaded from "/opt/hugo-phone/bridge/config.toml"
+INFO Virtual keyboard created
+INFO Watching ".../config.toml" for hot-reload
+INFO Connecting to AMI on 127.0.0.1:5038 ...
+INFO AMI banner: Asterisk Call Manager/9.0.0
+INFO Authenticated to AMI as hugo-bridge
+\end{plaincode}
+
+Check that the virtual keyboard exists:
+
+\begin{shellcode}
+sudo apt install -y evtest
+sudo evtest
+\end{shellcode}
+
+\texttt{hugo-phone-virtual-keyboard} must appear in the list. Select its number, then press DTMF keys in Linphone: evtest must show the corresponding press events.
+
+\section{The complete flow with the softphone}
+
+With the bridge running, DOSBox-Staging showing Hugo on the TV and Linphone registered:
+
+\begin{enumerate}
+  \item Dial \texttt{9000} from Linphone.
+  \item Hear the beep in the earpiece.
+  \item Press \texttt{2}. The character should jump/move up.
+  \item Try \texttt{4}, \texttt{6}, \texttt{8}, \texttt{5}.
+\end{enumerate}
+
+In the bridge logs:
+
+\begin{plaincode}
+INFO DTMF 2 from 102
+INFO DTMF 4 from 102
+\end{plaincode}
+
+\section{Calibration}
+
+The most sensitive parameter is \texttt{press\_duration\_ms} in \texttt{config.toml}:
+
+\begin{tomlcode}
+[bridge]
+press_duration_ms = 80
+\end{tomlcode}
+
+Symptoms and adjustments:
+
+\begin{table}[h]
+\centering
+\begin{tabular}{ll}
+\toprule
+\textbf{Symptom} & \textbf{Adjustment} \\
+\midrule
+One press = several actions & Lower to 40--50\,ms \\
+The press doesn't register & Raise to 120--150\,ms \\
+Movement is choppy & Raise to 100\,ms \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Any change is applied on save (hot-reload), without restarting the service.
+
+\section{Enable as a service}
+
+Once validated manually:
+
+\begin{shellcode}
+sudo systemctl start hugo-bridge
+sudo systemctl status hugo-bridge
+sudo systemctl enable hugo-bridge
+\end{shellcode}
+
+Live logs:
+
+\begin{shellcode}
+sudo journalctl -u hugo-bridge -f
+\end{shellcode}
+
+\section{Troubleshooting}
+
+\subsection{\texttt{Permission denied} on \texttt{/dev/uinput}}
+
+\begin{itemize}
+  \item The service runs as \texttt{root}, this shouldn't happen.
+  \item If you're running it manually, use \texttt{sudo}.
+  \item Check the udev rule at \texttt{/etc/udev/rules.d/99-hugo-uinput.rules}.
+\end{itemize}
+
+\subsection{The bridge connects but doesn't receive events}
+
+\begin{itemize}
+  \item Confirm that Linphone is calling \texttt{9000} and not some other extension.
+  \item On the Asterisk console, does \texttt{UserEvent: HugoKey} appear when you press DTMF? If not, the problem is in the dialplan (Phase 2).
+\end{itemize}
+
+\subsection{DTMFs reach the bridge but Hugo doesn't respond}
+
+\begin{itemize}
+  \item DOSBox-Staging requires window focus. If it was launched over SSH with X-forwarding, it loses focus.
+  \item Test the injection against another application: with the bridge running, open \texttt{nano} on the DOSBox TTY and verify that the cursor moves when you press DTMF.
+\end{itemize}
+
+\subsection{Cargo can't find dependencies during compilation}
+
+\begin{itemize}
+  \item Check Internet connectivity: \texttt{ping crates.io}.
+  \item If DNS is restricted, configure:
+  \begin{shellcode}
+echo "nameserver 1.1.1.1" | sudo tee /etc/resolv.conf
+  \end{shellcode}
+\end{itemize}
+
+\section{Phase wrap-up}
+
+With this phase, the whole software flow is validated. All that remains is replacing the Linphone softphone with a real analog telephone connected to the HT801.

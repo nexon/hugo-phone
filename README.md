@@ -55,8 +55,8 @@ Configurable en `bridge/config.toml` (hot-reload sin restart).
 ```
 hugo-phone/
 ├── README.md
-├── config
-|   |--asterisk/                  # /etc/asterisk/
+├── config/
+|   |-- asterisk/                  # /etc/asterisk/
 │      ├── sip.conf
 │      ├── extensions.conf
 │      └── manager.conf

@@ -1,0 +1,145 @@
+\chapter{System architecture}
+
+\section{Overview}
+
+The complete system is made up of three physical domains and five logical domains coexisting inside a single Raspberry Pi:
+
+\begin{center}
+\resizebox{\textwidth}{!}{%
+\begin{tikzpicture}[
+  node distance=0.6cm,
+  every node/.style={font=\small},
+  hw/.style={draw=hugoblue, thick, rounded corners=3pt, fill=hugoblue!10, minimum width=2.6cm, minimum height=1cm, align=center},
+  sw/.style={draw=hugogreen, thick, rounded corners=3pt, fill=hugogreen!10, minimum width=2.6cm, minimum height=0.9cm, align=center},
+  layer/.style={draw=gray!50, dashed, rounded corners=5pt, inner sep=10pt}
+]
+
+  \node[hw] (phone) at (0,0) {Analog\\DTMF phone};
+  \node[hw, right=of phone] (ata) {Grandstream\\HT801};
+
+  \node[sw, right=1.4cm of ata] (asterisk) {Asterisk\\PBX};
+  \node[sw, below=of asterisk] (bridge) {hugo-bridge\\(Rust)};
+  \node[sw, right=of bridge] (uinput) {Kernel\\/dev/uinput};
+  \node[sw, above=of uinput] (dosbox) {DOSBox-Staging\\+ Hugo};
+
+  \node[hw, right=1.4cm of dosbox] (tv) {HDMI\\television};
+
+  \begin{scope}[on background layer]
+    \node[layer, fit=(asterisk)(bridge)(uinput)(dosbox), label={[anchor=south,yshift=2pt]north:\textbf{Raspberry Pi 4 (2\,GB)}}] {};
+  \end{scope}
+
+  \draw[->, thick, hugoaccent] (phone) -- node[above,font=\tiny] {RJ11} (ata);
+  \draw[->, thick, hugoaccent] (ata) -- node[above,font=\tiny] {SIP/RTP} (asterisk);
+  \draw[->, thick, hugoaccent] (asterisk) -- node[right,font=\tiny] {AMI} (bridge);
+  \draw[->, thick, hugoaccent] (bridge) -- node[above,font=\tiny] {ioctl} (uinput);
+  \draw[->, thick, hugoaccent] (uinput) -- node[right,font=\tiny] {evdev} (dosbox);
+  \draw[->, thick, hugoaccent] (dosbox) -- node[above,font=\tiny] {HDMI} (tv);
+
+\end{tikzpicture}%
+}
+\end{center}
+
+\section{Data flow}
+
+Pressing the digit \textbf{2} on the phone travels along the following path:
+
+\begin{enumerate}
+  \item The phone generates the DTMF tone matching \textbf{2} (697\,Hz + 1336\,Hz combined) and sends it as analog audio to the HT801's FXS port.
+  \item The HT801 detects the tone and, depending on its configuration (\emph{DTMF method: RFC 2833}), encapsulates it as an \emph{out-of-band} RTP event and forwards it over SIP to Asterisk.
+  \item Asterisk receives the RFC 2833 event and exposes it to the running \emph{dialplan} as a digit read by the \texttt{Read()} function.
+  \item The \emph{dialplan} fires a \texttt{UserEvent} named \texttt{HugoKey} with the \texttt{Key=2} field, emitted by the \emph{Asterisk Manager Interface} (AMI) over TCP on \texttt{127.0.0.1:5038}.
+  \item The \texttt{hugo-bridge} process, subscribed to AMI, parses the event, looks up the configured \emph{keymap} and obtains the target key (\texttt{KEY\_UP}).
+  \item Through \texttt{ioctl(2)} on \texttt{/dev/uinput}, the bridge simulates a physical press (press + sync + sleep + release + sync) on a previously created virtual keyboard.
+  \item The kernel propagates the event through \texttt{evdev} to the input subsystem, where it is read by the SDL2 library that DOSBox-Staging uses for input.
+  \item DOSBox-Staging translates the key code into an IBM PC keyboard interrupt 16h, which Hugo reads inside its \emph{event loop}.
+  \item Hugo updates the character's position and renders the next frame through emulated VGA, which DOSBox dumps to the HDMI screen.
+\end{enumerate}
+
+The total end-to-end latency is dominated by the local SIP network and the game's render loop. In internal tests it ranges between 5 and 30\,ms, perfectly playable.
+
+\section{Logical components}
+
+\subsection{Asterisk}
+
+Open-source PBX. Here it plays four roles:
+
+\begin{itemize}
+  \item \textbf{SIP registrar}: accepts the HT801 registering as extension 101, and optionally softphones (Linphone) as test extensions.
+  \item \textbf{DTMF decoding}: extracts digits from RFC 2833 or \emph{inband} and delivers them to the dialplan.
+  \item \textbf{Dialplan}: program that defines what happens with each call. In Hugo Phone it is an infinite loop that reads a digit and emits a \texttt{UserEvent}.
+  \item \textbf{Manager Interface (AMI)}: TCP socket at \texttt{127.0.0.1:5038} where external clients authenticate and receive events in real time.
+\end{itemize}
+
+\subsection{hugo-bridge (Rust)}
+
+Native binary written in Rust, running as a \texttt{systemd} service. Internal components:
+
+\begin{itemize}
+  \item \textbf{In-house AMI client}: TCP/text implementation of the Asterisk Manager protocol, with no third-party \emph{crate} dependencies. About 150 lines of code in \texttt{src/ami.rs}.
+  \item \textbf{Virtual keyboard}: \emph{wrapper} around the \texttt{uinput} crate, creates an input device that the kernel exposes with the name \texttt{hugo-phone-virtual-keyboard}.
+  \item \textbf{Configuration hot-reload}: \emph{watcher} based on \texttt{notify} that detects changes to the \texttt{config.toml} file and updates the \emph{keymap} and other parameters without restarting the service.
+  \item \textbf{Automatic reconnection}: if the connection to Asterisk drops, the bridge retries with exponential \emph{backoff} up to 30 seconds.
+\end{itemize}
+
+\subsection{DOSBox-Staging}
+
+DOS emulator optimized for modern hardware. Configured in \emph{fullscreen} mode over KMSDRM (no X server) to minimize resource usage. It launches Hugo automatically from the \texttt{[autoexec]} section of its configuration file.
+
+\subsection{System services}
+
+\begin{table}[h]
+\centering
+\begin{tabular}{lll}
+\toprule
+\textbf{Service} & \textbf{Start mechanism} & \textbf{Function} \\
+\midrule
+\texttt{asterisk.service} & \texttt{systemd} & SIP PBX \\
+\texttt{hugo-bridge.service} & \texttt{systemd} (after asterisk) & DTMF $\to$ keyboard \\
+DOSBox-Staging & \texttt{.bashrc} on TTY1 & Runs Hugo \\
+Autologin tty1 & \texttt{raspi-config} & Boot without keyboard \\
+\bottomrule
+\end{tabular}
+\caption{Persistent services on the Raspberry Pi.}
+\end{table}
+
+\section{Network topology}
+
+The complete system lives on a home LAN with three devices that communicate:
+
+\begin{center}
+\begin{tikzpicture}[
+  node distance=1.5cm,
+  every node/.style={font=\small},
+  box/.style={draw=hugoblue, thick, rounded corners=3pt, fill=hugoblue!8, align=center, minimum width=3cm, minimum height=1.4cm}
+]
+  \node[box] (router) at (0,0) {Home router\\(DHCP, 192.168.1.1)};
+  \node[box, below left=of router] (pi) {Raspberry Pi 4\\192.168.1.10};
+  \node[box, below=of router] (ata) {HT801\\192.168.1.11};
+  \node[box, below right=of router] (mac) {Beto's Mac\\192.168.1.20};
+
+  \draw[-, thick] (router) -- (pi);
+  \draw[-, thick] (router) -- (ata);
+  \draw[-, thick] (router) -- (mac);
+
+  \node[below=2.7cm of router, font=\tiny, color=gray] {IP addresses must be reserved on the router};
+\end{tikzpicture}
+\end{center}
+
+\begin{tip}
+Reserving static IPs on the router (tied to each device's MAC address) is essential. If the HT801 changes IP between reboots, Asterisk won't be able to send it packets and the line will go mute.
+\end{tip}
+
+\section{Security decisions}
+
+The system is designed for a trusted home network:
+
+\begin{itemize}
+  \item Asterisk does \emph{not} expose its 5060 port to the outside. The router must \textbf{not} port-forward it.
+  \item AMI only listens on \texttt{127.0.0.1}, accessible only to local processes.
+  \item SIP and AMI passwords are random and changed at install time (the placeholder values ``\texttt{cambiame-*}'' must be replaced).
+  \item The bridge user runs as \texttt{root} because it needs access to \texttt{/dev/uinput}. Alternatively, the \texttt{input} group with a \texttt{udev} rule can be used.
+\end{itemize}
+
+\begin{warning}
+If for some reason you decide to expose the system to the Internet (for example, to let friends connect remotely), you must use SIP over TLS, strong passwords and, preferably, a VPN. Plain-text SIP on the open Internet is one of the most common attack vectors for telephone fraud.
+\end{warning}

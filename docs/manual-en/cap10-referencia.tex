@@ -1,0 +1,231 @@
+\chapter{Technical reference}
+
+\section{DTMF $\to$ keyboard mapping}
+
+\begin{table}[h]
+\centering
+\begin{tabular}{ccccp{5cm}}
+\toprule
+\textbf{DTMF} & \textbf{Frequencies (Hz)} & \textbf{Key} & \textbf{evdev code} & \textbf{Action in Hugo} \\
+\midrule
+1 & 697 + 1209 & Q & KEY\_Q & free / action 1 \\
+2 & 697 + 1336 & $\uparrow$ & KEY\_UP & jump or up \\
+3 & 697 + 1477 & E & KEY\_E & free / action 2 \\
+4 & 770 + 1209 & $\leftarrow$ & KEY\_LEFT & left \\
+5 & 770 + 1336 & Space & KEY\_SPACE & main action \\
+6 & 770 + 1477 & $\rightarrow$ & KEY\_RIGHT & right \\
+7 & 852 + 1209 & Z & KEY\_Z & free / action 3 \\
+8 & 852 + 1336 & $\downarrow$ & KEY\_DOWN & down / crouch \\
+9 & 852 + 1477 & X & KEY\_X & free / action 4 \\
+* & 941 + 1209 & Left Shift & KEY\_LEFTSHIFT & modifier \\
+0 & 941 + 1336 & Esc & KEY\_ESC & pause / menu \\
+\# & 941 + 1477 & Enter & KEY\_ENTER & confirm \\
+\bottomrule
+\end{tabular}
+\caption{Default DTMF $\to$ keyboard mapping.}
+\end{table}
+
+\section{Key system files}
+
+\begin{table}[h]
+\centering
+\small
+\begin{tabular}{p{0.45\textwidth} p{0.45\textwidth}}
+\toprule
+\textbf{File} & \textbf{Purpose} \\
+\midrule
+\texttt{/etc/asterisk/sip.conf} & Defines SIP extensions 101 and 102 \\
+\texttt{/etc/asterisk/extensions.conf} & Dialplan: logic for 9000 \\
+\texttt{/etc/asterisk/manager.conf} & Enables AMI with the \texttt{hugo-bridge} user \\
+\texttt{/etc/systemd/system/hugo-bridge.service} & Bridge service unit \\
+\texttt{/etc/udev/rules.d/99-hugo-uinput.rules} & Permissions on \texttt{/dev/uinput} \\
+\texttt{/opt/hugo-phone/bridge/hugo-bridge} & Compiled bridge binary \\
+\texttt{/opt/hugo-phone/bridge/config.toml} & Bridge configuration (hot-reload) \\
+\texttt{/opt/hugo-phone/games/hugo/} & Game files \\
+\texttt{\textasciitilde/.config/dosbox/dosbox-staging.conf} & Emulator configuration \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\section{Useful services and commands}
+
+\subsection{Managing Asterisk}
+
+\begin{shellcode}
+sudo systemctl status asterisk
+sudo systemctl restart asterisk
+sudo asterisk -rvvv               # interactive console
+sudo asterisk -rx "reload"        # reload configs without restart
+\end{shellcode}
+
+Commands inside the Asterisk CLI:
+
+\begin{plaincode}
+sip show peers              ; extension states
+sip show registry           ; registered clients
+sip set debug on/off        ; detailed traces
+dialplan show hugo-game     ; show loaded dialplan
+manager show settings       ; AMI state
+manager show users          ; AMI users
+manager show connected      ; active AMI sessions
+core show channels          ; active calls
+\end{plaincode}
+
+\subsection{Managing the bridge}
+
+\begin{shellcode}
+sudo systemctl status hugo-bridge
+sudo systemctl restart hugo-bridge
+sudo journalctl -u hugo-bridge -f      # live logs
+sudo journalctl -u hugo-bridge -n 100  # last 100 lines
+\end{shellcode}
+
+\subsection{Rebuilding the bridge}
+
+\begin{shellcode}
+cd /opt/hugo-phone/bridge
+sudo -u beto ~/.cargo/bin/cargo build --release
+sudo cp target/release/hugo-bridge ./hugo-bridge
+sudo systemctl restart hugo-bridge
+\end{shellcode}
+
+\subsection{Inspecting the virtual keyboard}
+
+\begin{shellcode}
+ls /dev/input/by-id/                   # look for hugo-phone-...
+sudo evtest                            # select the device
+                                       # watch events when pressing DTMF
+\end{shellcode}
+
+\subsection{HT801 health check}
+
+\begin{shellcode}
+ping 192.168.1.11                      # IP reachability
+nmap -p 5060 192.168.1.11              # SIP port open
+\end{shellcode}
+
+\section{Structure of the \texttt{config.toml} file}
+
+\begin{tomlcode}
+[ami]
+host = "127.0.0.1"
+port = 5038
+username = "hugo-bridge"
+secret = "REAL-PASSWORD"
+
+[bridge]
+press_duration_ms = 80
+event_name = "HugoKey"
+key_field = "Key"
+
+[keymap]
+"2" = "Up"
+"4" = "Left"
+"6" = "Right"
+"8" = "Down"
+"5" = "Space"
+"0" = "Esc"
+"1" = "Q"
+"3" = "E"
+"7" = "Z"
+"9" = "X"
+"*" = "LeftShift"
+"#" = "Enter"
+\end{tomlcode}
+
+\section{Supported key names}
+
+The \texttt{keyboard.rs} parser recognizes:
+
+\begin{itemize}
+  \item \textbf{Directional:} \texttt{Up}, \texttt{Down}, \texttt{Left}, \texttt{Right}
+  \item \textbf{Special:} \texttt{Space}, \texttt{Enter}, \texttt{Esc} (or \texttt{Escape}), \texttt{Tab}, \texttt{Backspace}
+  \item \textbf{Modifiers:} \texttt{LeftShift}, \texttt{RightShift}, \texttt{LeftCtrl}, \texttt{RightCtrl}, \texttt{LeftAlt}, \texttt{RightAlt}
+  \item \textbf{Letters:} \texttt{A} through \texttt{Z}
+  \item \textbf{Function keys:} \texttt{F1} through \texttt{F12}
+\end{itemize}
+
+If an unknown name is assigned, the bridge logs a warning but keeps running.
+
+\section{AMI protocol anatomy}
+
+\subsection{Initial banner}
+
+\begin{plaincode}
+Asterisk Call Manager/9.0.0
+\end{plaincode}
+
+\subsection{Login}
+
+\begin{plaincode}
+Action: Login
+Username: hugo-bridge
+Secret: REAL-PASSWORD
+Events: user,call
+(blank line)
+\end{plaincode}
+
+\subsection{Successful login response}
+
+\begin{plaincode}
+Response: Success
+Message: Authentication accepted
+(blank line)
+\end{plaincode}
+
+\subsection{UserEvent produced by the dialplan}
+
+\begin{plaincode}
+Event: UserEvent
+Privilege: user,all
+UserEvent: HugoKey
+Channel: PJSIP/101-00000003
+Caller: 101
+Key: 2
+Uniqueid: 1715641234.3
+(blank line)
+\end{plaincode}
+
+\section{Glossary}
+
+\begin{description}
+  \item[AMI] \emph{Asterisk Manager Interface}. Plain-text TCP protocol for controlling Asterisk from external clients.
+  \item[ATA] \emph{Analog Telephone Adapter}. Device that converts an analog line to SIP.
+  \item[DOSBox] Emulator of the MS-DOS operating system and the IBM PC compatible hardware. DOSBox-Staging is a modernized fork.
+  \item[DTMF] \emph{Dual-Tone Multi-Frequency}. Signaling system using pairs of tones, used by telephone keypads.
+  \item[evdev] Linux kernel subsystem that exposes input devices to \emph{user space}.
+  \item[FXO] \emph{Foreign eXchange Office}. Port that connects to a switchboard as if it were a telephone.
+  \item[FXS] \emph{Foreign eXchange Subscriber}. Port that supplies line as if it were the phone company.
+  \item[KMSDRM] \emph{Kernel Mode Setting / Direct Rendering Manager}. Linux kernel layer that allows drawing directly to the screen without an X server.
+  \item[PBX] \emph{Private Branch Exchange}. Private telephone switchboard.
+  \item[RFC 2833] Standard for carrying DTMF tones inside RTP packets, out of band relative to the main audio.
+  \item[RTP] \emph{Real-time Transport Protocol}. Protocol for transmitting audio and video in real time, over UDP.
+  \item[SIP] \emph{Session Initiation Protocol}. Signaling protocol for initiating, maintaining and terminating voice/video sessions.
+  \item[uinput] Linux kernel subsystem that lets \emph{user space} create virtual input devices.
+\end{description}
+
+\section{External references}
+
+\begin{itemize}
+  \item Official Asterisk documentation: \texttt{wiki.asterisk.org}
+  \item DOSBox-Staging: \texttt{dosbox-staging.github.io}
+  \item Rust \texttt{uinput} crate: \texttt{docs.rs/uinput}
+  \item Tokio: \texttt{tokio.rs}
+  \item Grandstream HT801 manual: \texttt{grandstream.com/products}
+  \item Raspberry Pi documentation: \texttt{raspberrypi.com/documentation}
+  \item Hugo on MyAbandonware: \texttt{myabandonware.com/game/hugo-eya}
+\end{itemize}
+
+\section{Credits}
+
+Hugo, the character and the franchise, are the property of \textbf{ITE Media ApS} (originally \emph{Interactive Television Entertainment}), Denmark. This project is a non-profit technical tribute with no official affiliation with the company.
+
+The complete system, its code and its documentation were developed as a personal project by \textbf{Beto} in collaboration with Claude (Anthropic) during May 2026.
+
+\vspace{1cm}
+
+\begin{center}
+\itshape\small
+``Hugo, watch out for that rock!''\\
+--- Generations of Chilean children in the nineties
+\end{center}
