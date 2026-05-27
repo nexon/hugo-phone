@@ -52,7 +52,7 @@ echo "==> Copiando configs Asterisk..."
 cp "$REPO_DIR/config/asterisk/sip.conf"        /etc/asterisk/sip.conf
 cp "$REPO_DIR/config/asterisk/extensions.conf" /etc/asterisk/extensions.conf
 cp "$REPO_DIR/config/asterisk/manager.conf"    /etc/asterisk/manager.conf
-chown asterisk:asterisk /etc/asterisk/*.conf
+chown nexon:nexon /etc/asterisk/*.conf
 chmod 640 /etc/asterisk/*.conf
 
 systemctl enable asterisk
