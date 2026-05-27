@@ -39,11 +39,11 @@ apt upgrade -y
 #  alsa-utils \
 #  git curl unzip
 
-echo "==> Instalando paquetes de dosbox.."
-apt install -y \
-   dosbox-staging \
-   xserver-xorg xinit openbox \
-   alsa-utils
+#echo "==> Instalando paquetes de dosbox.."
+#apt install -y \
+#   xserver-xorg xinit openbox \
+#   dosbox-staging \
+#   alsa-utils
 
 # ------------------------------------------------------------------
 # 2. Asterisk configs
