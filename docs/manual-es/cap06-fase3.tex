@@ -61,15 +61,24 @@ El paquete \texttt{dosbox-staging} no está disponible en el repositorio estánd
 
 Conectar HDMI + teclado USB a la Pi y loguearse en la TTY local (no por SSH). DOSBox necesita pantalla.
 
-Lanzar el instalador con el ISO montado como \texttt{D:}:
+Lanzar el instalador con el ISO montado como \texttt{D:}. Como \texttt{startx} a veces no parsea correctamente argumentos entre comillas, el camino más confiable es un script \emph{wrapper}:
 
 \begin{shellcode}
-startx /usr/bin/dosbox -- \
+cat > /tmp/install-hugo.sh <<'EOF'
+#!/bin/bash
+exec /usr/bin/dosbox \
   -c "mount c /opt/hugo-phone/games" \
   -c "imgmount d /opt/hugo-phone/games/hugo4.iso -t iso" \
   -c "d:" \
   -c "INSTALL.EXE"
+EOF
+chmod +x /tmp/install-hugo.sh
+startx /tmp/install-hugo.sh
 \end{shellcode}
+
+\begin{nota}
+NO usar \texttt{startx /usr/bin/dosbox -- -c "..."}: el \texttt{--} hace que \texttt{startx} interprete los \texttt{-c} como opciones para el servidor X, no para DOSBox, y falla con ``unrecognized option: mount''.
+\end{nota>
 
 Dentro del instalador:
 

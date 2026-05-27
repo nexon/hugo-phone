@@ -61,15 +61,24 @@ The \texttt{dosbox-staging} package is not available in the standard Pi reposito
 
 Plug HDMI + a USB keyboard into the Pi and log in on the local TTY (not over SSH). DOSBox needs a display.
 
-Launch the installer with the ISO mounted as \texttt{D:}:
+Launch the installer with the ISO mounted as \texttt{D:}. Because \texttt{startx} sometimes mishandles quoted arguments, the most reliable path is a \emph{wrapper} script:
 
 \begin{shellcode}
-startx /usr/bin/dosbox -- \
+cat > /tmp/install-hugo.sh <<'EOF'
+#!/bin/bash
+exec /usr/bin/dosbox \
   -c "mount c /opt/hugo-phone/games" \
   -c "imgmount d /opt/hugo-phone/games/hugo4.iso -t iso" \
   -c "d:" \
   -c "INSTALL.EXE"
+EOF
+chmod +x /tmp/install-hugo.sh
+startx /tmp/install-hugo.sh
 \end{shellcode}
+
+\begin{note}
+Do NOT use \texttt{startx /usr/bin/dosbox -- -c "..."}: the \texttt{--} makes \texttt{startx} interpret the \texttt{-c} flags as X-server options, not DOSBox options, and you'll see ``unrecognized option: mount''.
+\end{note>
 
 Inside the installer:
 
